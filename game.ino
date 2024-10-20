@@ -104,6 +104,28 @@ void updateTimer() {
     display.drawLine(newTimerX,SCREENHEIGHT - 4,newTimerX,SCREENHEIGHT,TS_8b_Red);
   }
 }
+
+void next(bool wasCorrect) {
+  if (wasCorrect) {
+    correct++;
+  } else {
+    lives--;
+    if (lives == 0) {
+      gameOver();
+      return;
+    }
+  }
+  if (correct == threshold) {
+    nextLevel();
+    return;
+  }
+  timerStartMillis = millis(); 
+  display.clearWindow(0, 20, SCREENWIDTH + 1, SCREENHEIGHT);
+  shapesHidden = false;
+  drawHUD();
+  drawShapes();
+}
+
 void nextLevel() {
   if (level == levels) {
     gameOver();
@@ -131,7 +153,8 @@ void gameOver () {
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
     display.print(txt);
     txt = "You got to level ";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 25);
+    int width = display.getPrintWidth(txt) + display.getPrintWidth("2");
+    display.setCursor(SCREENWIDTH / 2 - width / 2, 25);
     display.print(txt);
     display.setCursor(SCREENWIDTH / 2 + display.getPrintWidth(txt) / 2, 25);
     display.print(level);
@@ -143,38 +166,19 @@ void gameOver () {
 }
 
 void drawHUD () {
+  display.clearWindow(0, 0, SCREENWIDTH, 20);
+  
   display.fontColor(TS_8b_Green,TS_8b_Black);
-  display.setCursor(2, 10);
+  display.setCursor(2, 6);
   display.print(correct);
 
   display.fontColor(TS_8b_White,TS_8b_Black);
-  display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(prompts[level - 1]) / 2, 10);
+  display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(prompts[level - 1]) / 2, 6);
   display.print(prompts[level - 1]);
   
   display.fontColor(TS_8b_Red,TS_8b_Black);
-  display.setCursor(SCREENWIDTH - display.getPrintWidth("ww"), 10);
+  display.setCursor(SCREENWIDTH - 13, 6);
   display.print(lives);
-}
-
-void next(bool wasCorrect) {
-  if (wasCorrect) {
-    correct++;
-  } else {
-    lives--;
-    if (lives == 0) {
-      gameOver();
-      return;
-    }
-  }
-  if (correct == threshold) {
-    nextLevel();
-    return;
-  }
-  timerStartMillis = millis(); 
-  display.clearWindow(0, 20, SCREENWIDTH + 1, SCREENHEIGHT);
-  shapesHidden = false;
-  drawHUD();
-  drawShapes();
 }
 
 void drawShapes() {
@@ -229,31 +233,32 @@ void randomTriangle(bool left, int color) {
   int x = SCREENWIDTH / 2 + (left ? -20 : 20);
   int y = SCREENHEIGHT * 2 / 3;
   if (random(2) == 0) {
-    drawTriangle(x, y, 12, color, false);
-    drawTriangle(x, y, 24, color, false);
+    drawTriangle(x, y, 16, color, false);
+    drawTriangle(x, y, 28, color, false);
     return;
   }
-  drawTriangle(x, y, 24, color, true);
+  drawTriangle(x, y, 28, color, true);
 }
 
 void randomSquare(bool left, int color) {
-  int x = SCREENWIDTH / 2 + (left ? -26 : 10);
-  int y = SCREENHEIGHT * 2 / 3 - 14;
+  int x = SCREENWIDTH / 2 + (left ? -30 : 4);
+  int y = SCREENHEIGHT * 2 / 3 - 18;
+  int w = 28;
   if (random(2) == 0) {
-    display.drawRect(x, y, 24, 24, TSRectangleNoFill, color);
-    display.drawRect(x + 4, y + 4, 24 - 8, 24 - 8, TSRectangleNoFill, color);
+    display.drawRect(x, y, w, w, TSRectangleNoFill, color);
+    display.drawRect(x + 4, y + 4, w - 8, w - 8, TSRectangleNoFill, color);
     return;
   }
-  display.drawRect(x, y, 24, 24, TSRectangleFilled, color);
+  display.drawRect(x, y, w, w, TSRectangleFilled, color);
 }
 
 void randomCircle(bool left, int color) {
   int x = SCREENWIDTH / 2 + (left ? -20 : 20);
-  int y = SCREENHEIGHT * 2 / 3 - 2;
+  int y = SCREENHEIGHT * 2 / 3 - 4;
     if (random(2) == 0) {
-    drawCircle(x, y, 12, color, false);
-    drawCircle(x, y, 8, color, false);
+    drawCircle(x, y, 14, color, false);
+    drawCircle(x, y, 10, color, false);
     return;
   }
-  drawCircle(x, y, 12, color, true);
+  drawCircle(x, y, 14, color, true);
 }
