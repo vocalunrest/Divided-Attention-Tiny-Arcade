@@ -86,26 +86,6 @@ void checkInput() {
   } else {
     clickable1 = true;
   }
-
-  
-//  if (checkButton(TAButton2)) {
-//      if (clickable2 == true) {
-//         clickable2 = false;
-//
-//      }
-//      return;
-//    }
-//    clickable2 = true;
-//    if (checkButton(TAButton1)) {
-//      if (clickable1 == true) {
-//        clickable1 = false;
-//        
-//        next(false);
-//      }
-//      return;
-//    }
-//    clickable1 = true;
-//  }
 }
 
 void updateTimer() {
