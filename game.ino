@@ -8,8 +8,13 @@ TinyScreen display = TinyScreen(TinyScreenPlus);
 #define SCREENWIDTH 94 
 #define SCREENHEIGHT 64
 
-int state = -1; // 1 is gameplay, 2 is game over. 0 reserved for tutorial
+enum State {
+  //Tutorial,
+  GAMEPLAY,
+  END,
+};
 
+enum State state = GAMEPLAY; 
 int timerMax = 1500; // how long, in milliseconds, do we have to answer
 int timerStartMillis; // when did we start the timer
 int timerX = 0; // the last drawn X position of the timer
@@ -49,18 +54,18 @@ void setup() {
 
 void loop() {
   checkInput();
-  if (state == 1) {
+  if (state == GAMEPLAY) {
      updateTimer();
   }
 }
 
 void checkInput() {
-  if (state == 2 && ((checkButton(TAButton2) && clickable2) || (checkButton(TAButton1) && clickable1))) {
+  if (state == END && ((checkButton(TAButton2) && clickable2) || (checkButton(TAButton1) && clickable1))) {
     level = 0;
     nextLevel();
   }
 
-  if (state == 1) {
+  if (state == GAMEPLAY) {
     if (checkButton(TAButton2) && clickable2) {
       if ((level == 1 && currSameColor) || (level == 2 && currSameShape)) {
          next(true);
@@ -131,7 +136,7 @@ void nextLevel() {
     gameOver();
     return;
   }
-  state = 1;
+  state = GAMEPLAY;
   level++;
   lives = startingLives;
   correct = 0;
@@ -145,7 +150,7 @@ void nextLevel() {
 }
 
 void gameOver () {
-  state = 2;
+  state = END;
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White,TS_8b_Black);
   if (lives == 0) {
