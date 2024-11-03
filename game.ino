@@ -282,7 +282,7 @@ void displayTutorialStep()
     tutorialStep5 = "Matching Shapes";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 10);
     display.print(tutorialStep5);
-    tutorialStep5 = "[Left = Misatch]";
+    tutorialStep5 = "[Left = Mismatch]";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 55);
     display.print(tutorialStep5);
 
