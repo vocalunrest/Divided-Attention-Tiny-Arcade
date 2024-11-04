@@ -2,11 +2,17 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "TinyArcade.h"
+#include <SdFat.h> // Include the SdFat library for SD card functionality
 
 TinyScreen display = TinyScreen(TinyScreenPlus);
 
 #define SCREENWIDTH 94
 #define SCREENHEIGHT 64
+
+SdFat SD; // SD card object
+const uint8_t chipSelect = 10; // SD card chip select pin set to 10
+
+const int speakerPin = A0; // Speaker pin
 
 enum Screen
 {
@@ -27,7 +33,9 @@ struct GameState
   bool currSameColor;
   int lives;
   int correct;
+  int totalCorrect;     // New variable for total correct answers
   int level;
+  int highScore;        // high score tracking
 };
 
 struct GameState game = {.timerMax = 1500};
@@ -48,17 +56,41 @@ unsigned long debounceDelay = 30;
 
 int colors[] = {TS_8b_Blue, TS_8b_Red, TS_8b_Yellow};
 
+// Function prototypes for functions defined in shapes.ino
+void drawTriangle(int x0, int y0, int height, int color, bool fill);
+void drawCircle(int x0, int y0, int radius, int color, bool fill);
+
 void setup()
 {
-  // put your setup code here, to run once:
+  // Initialize SerialUSB for debugging
   USBDevice.init();
   USBDevice.attach();
   SerialUSB.begin(9600);
+
+  // Initialize the SD card
+  if (!SD.begin(chipSelect, SD_SCK_MHZ(25)))
+  {
+    SerialUSB.println("SD card initialization failed!");
+    // Handle error accordingly (e.g., disable SD card functionality)
+  }
+  else
+  {
+    SerialUSB.println("SD card initialized.");
+  }
+
   randomSeed(analogRead(2));
   arcadeInit();
   display.begin();
   display.setBrightness(10); // 0-15
   display.setFont(thinPixel7_10ptFontInfo);
+
+  // Read the high score from the SD card at the start
+  game.highScore = readHighScoreFromSD();
+
+  game.totalCorrect = 0; // Initialize totalCorrect
+
+  pinMode(speakerPin, OUTPUT); // Initialize speaker pin
+
   displayTutorialStep(); // Display the first tutorial step
 }
 
@@ -69,6 +101,21 @@ void loop()
   {
     updateTimer();
   }
+}
+
+void playBeep()
+{
+  tone(speakerPin, 500, 200); // Play a 1000Hz tone for 100ms
+}
+
+void playCorrectSound()
+{
+  tone(speakerPin, 1500, 100); // Higher pitch for correct answer
+}
+
+void playIncorrectSound()
+{
+  tone(speakerPin, 500, 100); // Lower pitch for incorrect answer
 }
 
 bool debounce(bool reading, bool* last, unsigned long* timer, bool* state) {
@@ -105,12 +152,14 @@ void checkInput()
   }
   
   if (screen == END && (button1Pressed || button2Pressed)) {
+    playBeep();
     game.level = 0;
     nextLevel();
   }
 
   if (screen == GAMEPLAY) {
     if (button2Pressed) {
+      playBeep();
       if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape)) {
          next(true);
        } else {
@@ -118,6 +167,7 @@ void checkInput()
        }
     }
     else if (button1Pressed) {
+      playBeep();
       if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape)) {
         next(true);
       }
@@ -126,8 +176,6 @@ void checkInput()
   }
 
 }
-
-
 
 void updateTimer()
 {
@@ -147,6 +195,7 @@ void updateTimer()
   if (newTimerX != game.timerX)
   {
     display.drawLine(newTimerX, SCREENHEIGHT - 4, newTimerX, SCREENHEIGHT, TS_8b_Red);
+    game.timerX = newTimerX;
   }
 }
 
@@ -154,10 +203,13 @@ void next(bool wasCorrect)
 {
   if (wasCorrect)
   {
+    playCorrectSound(); // Play correct sound
     game.correct++;
+    game.totalCorrect++; // Increment totalCorrect
   }
   else
   {
+    playIncorrectSound(); // Play incorrect sound
     game.lives--;
     if (game.lives == 0)
     {
@@ -180,6 +232,7 @@ void next(bool wasCorrect)
 void nextTutorialStep() {
   tutorialStep++;
   displayTutorialStep();
+  playBeep();
   if (tutorialStep > 6)
   {
     nextLevel();
@@ -191,16 +244,17 @@ void displayTutorialStep()
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
-  if (tutorialStep == 0) {
-    char *tutorial  = "Welcome!";
+  if (tutorialStep == 0)
+  {
+    char *tutorial = "Welcome!";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorial) / 2, 15);
     display.print(tutorial);
     tutorial = "[Press right]";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorial) / 2, 55);
     display.print(tutorial);
-    
-  } 
-  else if (tutorialStep == 1) {
+  }
+  else if (tutorialStep == 1)
+  {
     char *tutorialStep1 = "Buttons:";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep1) / 2, 2);
     display.print(tutorialStep1);
@@ -213,8 +267,9 @@ void displayTutorialStep()
     tutorialStep1 = "[Press right]";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep1) / 2, 55);
     display.print(tutorialStep1);
-
-  } else if (tutorialStep == 2) {
+  }
+  else if (tutorialStep == 2)
+  {
     char *tutorialStep2 = "Level 1:";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep2) / 2, 2);
     display.print(tutorialStep2);
@@ -227,8 +282,9 @@ void displayTutorialStep()
 
     drawShape(true, TS_8b_Yellow, 1);  // Left: Yellow square
     drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
-
-  } else if (tutorialStep == 3) {
+  }
+  else if (tutorialStep == 3)
+  {
     char *tutorialStep3 = "Level 1:";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 2);
     display.print(tutorialStep3);
@@ -236,13 +292,14 @@ void displayTutorialStep()
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 10);
     display.print(tutorialStep3);
     tutorialStep3 = "[Left = Mismatch]";
-    display.setCursor(SCREENWIDTH / 2  - display.getPrintWidth(tutorialStep3) / 2, 55);
+    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 55);
     display.print(tutorialStep3);
 
-    drawShape(true, TS_8b_Blue, 1);  // Left: Blue square
+    drawShape(true, TS_8b_Blue, 1);   // Left: Blue square
     drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
-
-  } else if (tutorialStep == 4) {
+  }
+  else if (tutorialStep == 4)
+  {
     char *tutorialStep4 = "Level 2:";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep4) / 2, 2);
     display.print(tutorialStep4);
@@ -255,9 +312,9 @@ void displayTutorialStep()
 
     drawShape(true, TS_8b_Blue, 0); // Left: Blue triangle
     drawShape(false, TS_8b_Red, 0); // Right: Red triangle
-
   }
-  else if (tutorialStep == 5) {
+  else if (tutorialStep == 5)
+  {
     char *tutorialStep5 = "Level 2:";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 2);
     display.print(tutorialStep5);
@@ -270,16 +327,15 @@ void displayTutorialStep()
 
     drawShape(true, TS_8b_Blue, 1); // Left: Blue square
     drawShape(false, TS_8b_Blue, 0); // Right: Blue triangle
-
   }
-    else if (tutorialStep == 6) {
+  else if (tutorialStep == 6)
+  {
     char *tutorialStep6 = "Start Game!";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep6) / 2, 15);
     display.print(tutorialStep6);
     tutorialStep6 = "[Press right]";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep6) / 2, 55);
     display.print(tutorialStep6);
-
   }
 }
 
@@ -293,7 +349,7 @@ void nextLevel()
   screen = GAMEPLAY;
   game.level++;
   game.lives = startingLives;
-  game.correct = 0;
+  game.correct = 0; // Resetting correct answers for the new level
   game.currSameShape = false;
   game.currSameColor = false;
   game.timerStartMillis = millis();
@@ -308,6 +364,17 @@ void gameOver()
   screen = END;
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
+
+  // Write the total score to the SD card
+  writeScoreToSD(game.totalCorrect);
+
+  // Update high score if necessary
+  if (game.totalCorrect > game.highScore)
+  {
+    game.highScore = game.totalCorrect;
+    SerialUSB.println("New high score!");
+  }
+
   if (game.lives == 0)
   {
     char *txt = "Game Over";
@@ -319,11 +386,16 @@ void gameOver()
     display.print(txt);
     display.setCursor(SCREENWIDTH / 2 + display.getPrintWidth(txt) / 2, 25);
     display.print(game.level);
-    return;
   }
-  char *txt = "You win";
-  display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
-  display.print(txt);
+  else
+  {
+    char *txt = "You win";
+    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
+    display.print(txt);
+  }
+
+  // Display the high score
+  displayHighScore();
 }
 
 void drawHUD()
@@ -358,18 +430,14 @@ void drawShapes()
     else
     {
       // choose the other color and make sure it's different
-      rightColorIndex = random(2);
-      if (rightColorIndex >= leftColorIndex)
-      {
-        rightColorIndex++;
-      }
+      rightColorIndex = (leftColorIndex + random(1, 3)) % 3;
       game.currSameColor = false;
     }
 
     drawShape(true, colors[leftColorIndex], random(3));
     drawShape(false, colors[rightColorIndex], random(3));
   }
-  if (game.level == 2)
+  else if (game.level == 2)
   {
     // We want to get two different shapes half the time (color is totally random)
     int leftShapeType = random(3);
@@ -381,11 +449,7 @@ void drawShapes()
     }
     else
     {
-      rightShapeType = random(2);
-      if (rightShapeType >= leftShapeType)
-      {
-        rightShapeType++;
-      }
+      rightShapeType = (leftShapeType + random(1, 3)) % 3;
       game.currSameShape = false;
     }
 
@@ -449,3 +513,68 @@ void randomCircle(bool left, int color)
   }
   drawCircle(x, y, 14, color, true);
 }
+
+// Implement the SD card score-saving functions
+
+void writeScoreToSD(int score)
+{
+  // Open or create the file in append mode
+  File file = SD.open("scores.txt", FILE_WRITE);
+
+  if (file)
+  {
+    // Write the score and close the file
+    file.println(score);
+    file.close();
+    SerialUSB.println("Score written to SD card.");
+  }
+  else
+  {
+    SerialUSB.println("Error opening scores.txt");
+  }
+}
+
+int readHighScoreFromSD()
+{
+  File file = SD.open("scores.txt");
+
+  if (file)
+  {
+    int highScore = 0;
+
+    while (file.available())
+    {
+      String line = file.readStringUntil('\n');
+      int score = line.toInt();
+      if (score > highScore)
+      {
+        highScore = score;
+      }
+    }
+    file.close();
+    SerialUSB.print("High score read from SD card: ");
+    SerialUSB.println(highScore);
+    return highScore;
+  }
+  else
+  {
+    SerialUSB.println("Error opening scores.txt");
+    return 0; // Return 0 if the file doesn't exist or can't be opened
+  }
+}
+
+void displayHighScore()
+{
+  display.fontColor(TS_8b_Yellow, TS_8b_Black);
+  String highScoreText = "High Score: " + String(game.highScore);
+
+  // Create a modifiable character array
+  char highScoreTextArray[30]; // Ensure the array is large enough
+  strcpy(highScoreTextArray, highScoreText.c_str());
+
+  int x = SCREENWIDTH / 2 - display.getPrintWidth(highScoreTextArray) / 2;
+  int y = SCREENHEIGHT - 15; // Adjust the position as needed
+  display.setCursor(x, y);
+  display.print(highScoreTextArray);
+}
+
