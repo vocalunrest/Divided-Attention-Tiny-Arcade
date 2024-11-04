@@ -45,9 +45,14 @@ int startingLives = 10;
 int levels = 2;
 char *prompts[] = {"Same color", "Same shape"};
 
-// When button is clicked, becomes false until released
-bool clickable1 = true;
-bool clickable2 = true;
+// debouncing
+bool buttonState1 = false;
+bool buttonState2 = false;
+bool lastButtonState1 = false;
+bool lastButtonState2 = false;
+unsigned long lastDebounced1 = 0;
+unsigned long lastDebounced2 = 0;
+unsigned long debounceDelay = 30;
 
 int colors[] = {TS_8b_Blue, TS_8b_Red, TS_8b_Yellow};
 
@@ -113,109 +118,63 @@ void playIncorrectSound()
   tone(speakerPin, 500, 100); // Lower pitch for incorrect answer
 }
 
+bool debounce(bool reading, bool* last, unsigned long* timer, bool* state) {
+  if (reading != *last) {
+    *timer = millis();
+  }
+
+  bool valueChanged = false;
+  if ((millis() - *timer) > debounceDelay) {
+    if (reading != *state) {
+      *state = reading;
+      valueChanged = true;
+    }
+  }
+
+  *last = reading;
+  return valueChanged;
+}
+
 void checkInput()
 {
-  uint8_t button1Pressed;
-  uint8_t button2Pressed;
+  // These are only true once per press (they're "click handlers" but they trigger on press, not release)
+  bool button1Pressed = debounce(checkButton(TAButton1), &lastButtonState1, &lastDebounced1, &buttonState1) && buttonState1;
+  bool button2Pressed = debounce(checkButton(TAButton2), &lastButtonState2, &lastDebounced2, &buttonState2) && buttonState2;
   if (screen == TUTORIAL)
   {
-    button1Pressed = checkButton(TAButton1);
-    button2Pressed = checkButton(TAButton2);
-    if ((tutorialStep == 3 || tutorialStep == 5) && button1Pressed && clickable1)
-    {
-      clickable1 = false;
-      tutorialStep++;
-      playBeep(); // Play sound
-      displayTutorialStep();
-      if (tutorialStep > 6)
-      {
-        nextLevel();
+    if ((tutorialStep == 3 || tutorialStep == 5)) {
+      if (button1Pressed) {
+        nextTutorialStep();
       }
-    }
-    if (!button1Pressed)
-    {
-      clickable1 = true;
-    }
-
-    if ((tutorialStep == 0 || tutorialStep == 1 || tutorialStep == 2 || tutorialStep == 4 || tutorialStep == 6) && button2Pressed && clickable2)
-    {
-      clickable2 = false;
-      tutorialStep++;
-      playBeep(); // Play sound
-      displayTutorialStep();
-      if (tutorialStep > 6)
-      {
-        nextLevel();
-      }
-    }
-    if (!button2Pressed)
-    {
-      clickable2 = true;
+    } else if (button2Pressed) {
+      nextTutorialStep();
     }
   }
-
-  if (screen == END)
-  {
-    if ((checkButton(TAButton2) && clickable2) || (checkButton(TAButton1) && clickable1))
-    {
-      game.level = 0;
-      tutorialStep = 0;
-      game.totalCorrect = 0; // Reset totalCorrect for the new game
-      screen = TUTORIAL;
-      playBeep(); // Play sound
-      displayTutorialStep();
-      clickable1 = clickable2 = false;
-    }
-    else
-    {
-      if (!checkButton(TAButton1) && !clickable1)
-        clickable1 = true;
-      if (!checkButton(TAButton2) && !clickable2)
-        clickable2 = true;
-    }
+  
+  if (screen == END && (button1Pressed || button2Pressed)) {
+    playBeep();
+    game.level = 0;
+    nextLevel();
   }
 
-  if (screen == GAMEPLAY)
-  {
-    button1Pressed = checkButton(TAButton1);
-    button2Pressed = checkButton(TAButton2);
-
-    if (button2Pressed && clickable2)
-    {
-      playBeep(); // Play sound
-      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape))
-      {
+  if (screen == GAMEPLAY) {
+    if (button2Pressed) {
+      playBeep();
+      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape)) {
+         next(true);
+       } else {
+       next(false);
+       }
+    }
+    else if (button1Pressed) {
+      playBeep();
+      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape)) {
         next(true);
       }
-      else
-      {
-        next(false);
-      }
-      clickable2 = false;
-    }
-    else if (!button2Pressed)
-    {
-      clickable2 = true;
-    }
-
-    if (button1Pressed && clickable1)
-    {
-      playBeep(); // Play sound
-      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape))
-      {
-        next(true);
-      }
-      else
-      {
-        next(false);
-      }
-      clickable1 = false;
-    }
-    else if (!button1Pressed)
-    {
-      clickable1 = true;
+      else { next(false); }
     }
   }
+
 }
 
 void updateTimer()
@@ -268,6 +227,16 @@ void next(bool wasCorrect)
   game.shapesHidden = false;
   drawHUD();
   drawShapes();
+}
+
+void nextTutorialStep() {
+  tutorialStep++;
+  displayTutorialStep();
+  playBeep();
+  if (tutorialStep > 6)
+  {
+    nextLevel();
+  }
 }
 
 void displayTutorialStep()
