@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "TinyArcade.h"
-#include <SdFat.h> // Include the SdFat library for SD card functionality
+#include <SdFat.h> // Include the SdFat library for SD card functionality (Sketch -> Include Library -> Manage Libraries -> SdFat)
 
 TinyScreen display = TinyScreen(TinyScreenPlus);
 
@@ -577,4 +577,3 @@ void displayHighScore()
   display.setCursor(x, y);
   display.print(highScoreTextArray);
 }
-
