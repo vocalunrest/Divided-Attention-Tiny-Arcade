@@ -68,89 +68,50 @@ void loop()
 
 void checkInput()
 {
-  uint8_t button1Pressed;
-  uint8_t button2Pressed;
+  bool button1Pressed = checkButton(TAButton1) && clickable1;
+  bool button2Pressed = checkButton(TAButton2) && clickable2;
+
   if (screen == TUTORIAL)
   {
-    button1Pressed = checkButton(TAButton1);
-    button2Pressed = checkButton(TAButton2);
-    if ((tutorialStep == 3 || tutorialStep == 5) && button1Pressed && clickable1) {
-      clickable1 = false;
-      tutorialStep++;
-      displayTutorialStep();
-      if (tutorialStep > 6)
-      {
-        nextLevel();
+    if ((tutorialStep == 3 || tutorialStep == 5)) {
+      if (button1Pressed) {
+        nextTutorialStep();
       }
+    } else if (button2Pressed) {
+      nextTutorialStep();
     }
-    if(!button1Pressed) {
-      clickable1 = true;
-    }
+  }
+  
+  if (screen == END && (button1Pressed || button2Pressed)) {
+    game.level = 0;
+    nextLevel();
+  }
 
-    if ((tutorialStep == 0 || tutorialStep == 1 || tutorialStep == 2 || tutorialStep == 4 || tutorialStep == 6) && button2Pressed && clickable2) {
-      clickable2 = false;
-      tutorialStep++;
-      displayTutorialStep();
-      if (tutorialStep > 6)
-      {
-        nextLevel();
-      }
+  if (screen == GAMEPLAY) {
+    if (button2Pressed) {
+      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape)) {
+         next(true);
+       } else {
+       next(false);
+       }
     }
-    if(!button2Pressed) {
-      clickable2 = true;
+    else if (button1Pressed) {
+      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape)) {
+        next(true);
+      }
+      else { next(false); }
     }
   }
 
-  if (screen == END)
-  {
-    if ((checkButton(TAButton2) && clickable2) || (checkButton(TAButton1) && clickable1))
-    {
-      game.level = 0;
-      nextLevel();
-      clickable1 = clickable2 = false;
-    }
-    else
-    {
-      if (!checkButton(TAButton1) && !clickable1) clickable1 = true;
-      if (!checkButton(TAButton2) && !clickable2) clickable2 = true;
-    }
+  if (checkButton(TAButton2)) {
+    clickable2 = false;
+  } else {
+    clickable2 = true;
   }
-
-  if (screen == GAMEPLAY)
-  {
-    if (checkButton(TAButton2) && clickable2)
-    {
-      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape))
-      {
-        next(true);
-      }
-      else
-      {
-        next(false);
-      }
-      clickable2 = false;
-    }
-    else if (!checkButton(TAButton2) && !clickable2)
-    {
-      clickable2 = true;
-    }
-
-    if (checkButton(TAButton1) && clickable1)
-    {
-      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape))
-      {
-        next(true);
-      }
-      else
-      {
-        next(false);
-      }
-      clickable1 = false;
-    }
-    else if (!checkButton(TAButton1) && !clickable1)
-    {
-      clickable1 = true;
-    }
+  if (checkButton(TAButton1)) {
+    clickable1 = false;
+  } else {
+    clickable1 = true;
   }
 }
 
@@ -202,6 +163,15 @@ void next(bool wasCorrect)
   game.shapesHidden = false;
   drawHUD();
   drawShapes();
+}
+
+void nextTutorialStep() {
+  tutorialStep++;
+  displayTutorialStep();
+  if (tutorialStep > 6)
+  {
+    nextLevel();
+  }
 }
 
 void displayTutorialStep()
