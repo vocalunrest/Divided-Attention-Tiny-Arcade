@@ -37,9 +37,14 @@ int startingLives = 10;
 int levels = 2;
 char *prompts[] = {"Same color", "Same shape"};
 
-// When button is clicked, becomes false until released
-bool clickable1 = true;
-bool clickable2 = true;
+// debouncing
+bool buttonState1 = false;
+bool buttonState2 = false;
+bool lastButtonState1 = false;
+bool lastButtonState2 = false;
+unsigned long lastDebounced1 = 0;
+unsigned long lastDebounced2 = 0;
+unsigned long debounceDelay = 30;
 
 int colors[] = {TS_8b_Blue, TS_8b_Red, TS_8b_Yellow};
 
@@ -66,11 +71,28 @@ void loop()
   }
 }
 
+bool debounce(bool reading, bool* last, unsigned long* timer, bool* state) {
+  if (reading != *last) {
+    *timer = millis();
+  }
+
+  bool valueChanged = false;
+  if ((millis() - *timer) > debounceDelay) {
+    if (reading != *state) {
+      *state = reading;
+      valueChanged = true;
+    }
+  }
+
+  *last = reading;
+  return valueChanged;
+}
+
 void checkInput()
 {
-  bool button1Pressed = checkButton(TAButton1) && clickable1;
-  bool button2Pressed = checkButton(TAButton2) && clickable2;
-
+  // These are only true once per press (they're "click handlers" but they trigger on press, not release)
+  bool button1Pressed = debounce(checkButton(TAButton1), &lastButtonState1, &lastDebounced1, &buttonState1) && buttonState1;
+  bool button2Pressed = debounce(checkButton(TAButton2), &lastButtonState2, &lastDebounced2, &buttonState2) && buttonState2;
   if (screen == TUTORIAL)
   {
     if ((tutorialStep == 3 || tutorialStep == 5)) {
@@ -103,16 +125,6 @@ void checkInput()
     }
   }
 
-  if (checkButton(TAButton2)) {
-    clickable2 = false;
-  } else {
-    clickable2 = true;
-  }
-  if (checkButton(TAButton1)) {
-    clickable1 = false;
-  } else {
-    clickable1 = true;
-  }
 }
 
 
