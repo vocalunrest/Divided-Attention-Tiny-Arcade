@@ -49,11 +49,13 @@ struct DebounceState
 {
   bool state;
   bool lastState;
-  unsigned long lastDebounced;
+  unsigned long lastTime; //the last time we got a reading that differs from the one that came before it
 };
 
 struct DebounceState button1Debounce;
 struct DebounceState button2Debounce;
+struct DebounceState leftDebounce;
+struct DebounceState rightDebounce;
 
 unsigned long debounceDelay = 30;
 
@@ -127,11 +129,11 @@ void playIncorrectSound()
 
 bool debounce(bool reading, DebounceState *debounceState) {
   if (reading != debounceState->lastState) {
-    debounceState->lastDebounced = millis();
+    debounceState->lastTime = millis();
   }
 
   bool valueChanged = false;
-  if ((millis() - debounceState->lastDebounced) > debounceDelay) {
+  if ((millis() - debounceState->lastTime) > debounceDelay) {
     if (reading != debounceState->state) {
       debounceState->state = reading;
       valueChanged = true;
@@ -147,25 +149,31 @@ void checkInput()
   // These are only true once per press (they're "click handlers" that trigger on press, not release)
   bool button1Pressed = debounce(checkButton(TAButton1), &button1Debounce) && button1Debounce.state;
   bool button2Pressed = debounce(checkButton(TAButton2), &button2Debounce) && button2Debounce.state;
+  bool leftStickPressed = debounce(checkJoystick(TAJoystickLeft), &leftDebounce) && leftDebounce.state;
+  bool rightStickPressed = debounce(checkJoystick(TAJoystickRight), &rightDebounce) && rightDebounce.state;
+
+  bool leftPressed = button1Pressed || leftStickPressed;
+  bool rightPressed = button2Pressed || rightStickPressed;
+  
   if (screen == TUTORIAL)
   {
     if ((tutorialStep == 3 || tutorialStep == 5)) {
-      if (button1Pressed) {
+      if (leftPressed) {
         nextTutorialStep();
       }
-    } else if (button2Pressed) {
+    } else if (rightPressed) {
       nextTutorialStep();
     }
   }
   
-  if (screen == END && (button1Pressed || button2Pressed)) {
+  if (screen == END && (leftPressed || rightPressed)) {
     playBeep();
     game.level = 0;
     nextLevel();
   }
 
   if (screen == GAMEPLAY) {
-    if (button2Pressed) {
+    if (rightPressed) {
       playBeep();
       if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape)) {
          next(true);
@@ -173,7 +181,7 @@ void checkInput()
        next(false);
        }
     }
-    else if (button1Pressed) {
+    else if (leftPressed) {
       playBeep();
       if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape)) {
         next(true);
