@@ -45,13 +45,16 @@ int startingLives = 10;
 int levels = 2;
 char *prompts[] = {"Same color", "Same shape"};
 
-// debouncing
-bool buttonState1 = false;
-bool buttonState2 = false;
-bool lastButtonState1 = false;
-bool lastButtonState2 = false;
-unsigned long lastDebounced1 = 0;
-unsigned long lastDebounced2 = 0;
+struct DebounceState
+{
+  bool state;
+  bool lastState;
+  unsigned long lastDebounced;
+};
+
+struct DebounceState button1Debounce;
+struct DebounceState button2Debounce;
+
 unsigned long debounceDelay = 30;
 
 int colors[] = {TS_8b_Blue, TS_8b_Red, TS_8b_Yellow};
@@ -66,6 +69,8 @@ void setup()
   USBDevice.init();
   USBDevice.attach();
   SerialUSB.begin(9600);
+
+  delay(1000);
 
   // Initialize the SD card
   if (!SD.begin(chipSelect, SD_SCK_MHZ(25)))
@@ -86,6 +91,8 @@ void setup()
 
   // Read the high score from the SD card at the start
   game.highScore = readHighScoreFromSD();
+  SerialUSB.print("Existing High Score: ");
+  SerialUSB.print(String(game.highScore));
 
   game.totalCorrect = 0; // Initialize totalCorrect
 
@@ -118,28 +125,28 @@ void playIncorrectSound()
   tone(speakerPin, 500, 100); // Lower pitch for incorrect answer
 }
 
-bool debounce(bool reading, bool* last, unsigned long* timer, bool* state) {
-  if (reading != *last) {
-    *timer = millis();
+bool debounce(bool reading, DebounceState *debounceState) {
+  if (reading != debounceState->lastState) {
+    debounceState->lastDebounced = millis();
   }
 
   bool valueChanged = false;
-  if ((millis() - *timer) > debounceDelay) {
-    if (reading != *state) {
-      *state = reading;
+  if ((millis() - debounceState->lastDebounced) > debounceDelay) {
+    if (reading != debounceState->state) {
+      debounceState->state = reading;
       valueChanged = true;
     }
   }
 
-  *last = reading;
+  debounceState->lastState = reading;
   return valueChanged;
 }
 
 void checkInput()
 {
-  // These are only true once per press (they're "click handlers" but they trigger on press, not release)
-  bool button1Pressed = debounce(checkButton(TAButton1), &lastButtonState1, &lastDebounced1, &buttonState1) && buttonState1;
-  bool button2Pressed = debounce(checkButton(TAButton2), &lastButtonState2, &lastDebounced2, &buttonState2) && buttonState2;
+  // These are only true once per press (they're "click handlers" that trigger on press, not release)
+  bool button1Pressed = debounce(checkButton(TAButton1), &button1Debounce) && button1Debounce.state;
+  bool button2Pressed = debounce(checkButton(TAButton2), &button2Debounce) && button2Debounce.state;
   if (screen == TUTORIAL)
   {
     if ((tutorialStep == 3 || tutorialStep == 5)) {
