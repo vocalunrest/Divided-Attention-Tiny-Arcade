@@ -49,6 +49,10 @@ struct LevelStats
 
 struct LevelStats stats[levels];
 
+int const maxHistory = 5; // the max # of previous session stats to load
+LevelStats history[maxHistory][levels];
+int historySize = 0; // how many previous sessions were actually loaded
+
 int tutorialStep = 0;
 
 struct GameState game = {.timerMax = 1500};
@@ -415,13 +419,6 @@ void printStatLine(struct LevelStats stats[], int xStart)
   {
     if (stats[i].correct > 0 || stats[i].incorrect > 0)
     { // if we got to this level
-      SerialUSB.print("Level ");
-      SerialUSB.print(i + 1);
-      SerialUSB.print(": ");
-      SerialUSB.print(stats[i].correct);
-      SerialUSB.print(" correct, ");
-      SerialUSB.print(stats[i].incorrect);
-      SerialUSB.println(" incorrect");
       int bottom = SCREENHEIGHT - (levelHeight + gap) * i - 1;
       int total = stats[i].correct + stats[i].incorrect;
       int totalHeight = stats[i].correct >= threshold ? levelHeight : levelHeight / 2;
@@ -440,6 +437,11 @@ void gameOver()
   display.fontColor(TS_8b_White, TS_8b_Black);
 
   printStatLine(stats, 3);
+  readStatsFromSD();
+  for (int i = 0; i < historySize; i++) {
+    printStatLine(history[i], i * 8);
+  }
+  writeStatsToSD();
   // Write the total score to the SD card
   //  writeScoreToSD(game.totalCorrect);
   //
@@ -468,6 +470,8 @@ void gameOver()
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
     display.print(txt);
   }
+
+  memset(stats, 0, sizeof stats);
 
   // Display the high score
   //  displayHighScore();
@@ -590,54 +594,101 @@ void randomCircle(bool left, int color)
   drawCircle(x, y, 14, color, true);
 }
 
-// Implement the SD card score-saving functions
-
-void writeScoreToSD(int score)
-{
-  // Open or create the file in append mode
-  File file = SD.open("scores.txt", FILE_WRITE);
+void writeStatsToSD() {
+  File file = SD.open("stats.txt", FILE_WRITE);
 
   if (file)
   {
-    // Write the score and close the file
-    file.println(score);
-    file.close();
-    SerialUSB.println("Score written to SD card.");
-  }
-  else
-  {
-    SerialUSB.println("Error opening scores.txt");
-  }
-}
-
-int readHighScoreFromSD()
-{
-  File file = SD.open("scores.txt");
-
-  if (file)
-  {
-    int highScore = 0;
-
-    while (file.available())
-    {
-      String line = file.readStringUntil('\n');
-      int score = line.toInt();
-      if (score > highScore)
-      {
-        highScore = score;
+    for (int i = 0; i < levels; i++) {
+      if (stats[i].correct > 0 || stats[i].incorrect > 0) {
+        file.print(stats[i].correct);
+        file.print(",");
+        file.print(stats[i].incorrect);
+        file.print(";");
       }
     }
+    file.println();
     file.close();
-    SerialUSB.print("High score read from SD card: ");
-    SerialUSB.println(highScore);
-    return highScore;
+    SerialUSB.println("Stats written to SD card.");
   }
   else
   {
-    SerialUSB.println("Error opening scores.txt");
-    return 0; // Return 0 if the file doesn't exist or can't be opened
+    SerialUSB.println("Error opening stats.txt");
   }
 }
+
+
+void readStatsFromSD() {
+  File file = SD.open("stats.txt");
+  if (file) {
+    historySize = 0;
+    while (file.available() && historySize < maxHistory) {
+      String line = file.readStringUntil('\n');
+      SerialUSB.println(line);
+      int statCount = 0;
+      int lastPos = 0;
+      int pos = 0;
+
+      while (lastPos < line.length() && statCount < levels) {
+        pos = line.indexOf(';', lastPos);
+        if (pos == -1) pos = line.length();
+        String statString = line.substring(lastPos, pos);
+        if (statString.length() > 0) {
+          int commaPos = statString.indexOf(',');
+          if (commaPos >= 0) {
+            String correctStr = statString.substring(0, commaPos);
+            String incorrectStr = statString.substring(commaPos + 1);
+            int correct = correctStr.toInt();
+            int incorrect = incorrectStr.toInt();
+            SerialUSB.print(correct);
+            SerialUSB.print(",");
+            SerialUSB.print(incorrect);
+            SerialUSB.println(";");
+    
+            history[historySize][statCount].correct = correct;
+            history[historySize][statCount].incorrect = incorrect;
+            statCount++;
+          }
+        }
+        lastPos = pos + 1; // Move past the semicolon
+      }
+      historySize++;
+    }
+    file.close();
+  } else {
+    // Handle error opening file
+    SerialUSB.println("Error opening stats.txt");
+  }
+}
+
+// int readHighScoreFromSD()
+// {
+//   File file = SD.open("scores.txt");
+
+//   if (file)
+//   {
+//     int highScore = 0;
+
+//     while (file.available())
+//     {
+//       String line = file.readStringUntil('\n');
+//       int score = line.toInt();
+//       if (score > highScore)
+//       {
+//         highScore = score;
+//       }
+//     }
+//     file.close();
+//     SerialUSB.print("High score read from SD card: ");
+//     SerialUSB.println(highScore);
+//     return highScore;
+//   }
+//   else
+//   {
+//     SerialUSB.println("Error opening scores.txt");
+//     return 0; // Return 0 if the file doesn't exist or can't be opened
+//   }
+// }
 
 // void displayHighScore()
 //{
