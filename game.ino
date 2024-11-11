@@ -9,7 +9,7 @@ TinyScreen display = TinyScreen(TinyScreenPlus);
 #define SCREENWIDTH 94
 #define SCREENHEIGHT 64
 
-SdFat SD; // SD card object
+SdFat SD;                      // SD card object
 const uint8_t chipSelect = 10; // SD card chip select pin set to 10
 
 const int speakerPin = A0; // Speaker pin
@@ -23,6 +23,11 @@ enum Screen
 
 enum Screen screen = TUTORIAL;
 
+const int threshold = 15; // how many correct answers to progress to the next level
+const int levels = 2;
+const int startingLives = 10;
+char *prompts[] = {"Same color", "Same shape"};
+
 struct GameState
 {
   int timerMax;         // how long, in milliseconds, do we have to answer
@@ -33,25 +38,33 @@ struct GameState
   bool currSameColor;
   int lives;
   int correct;
-  int totalCorrect;     // New variable for total correct answers
   int level;
-  int highScore;        // high score tracking
 };
 
-struct GameState game = {.timerMax = 1500};
-int tutorialStep = 0;
-int threshold = 15; // how many correct answers to progress to the next level
-int startingLives = 10;
-int levels = 2;
-char *prompts[] = {"Same color", "Same shape"};
+struct LevelStats
+{
+  int correct;
+  int incorrect;
+};
 
-// debouncing
-bool buttonState1 = false;
-bool buttonState2 = false;
-bool lastButtonState1 = false;
-bool lastButtonState2 = false;
-unsigned long lastDebounced1 = 0;
-unsigned long lastDebounced2 = 0;
+struct LevelStats stats[levels];
+
+int tutorialStep = 0;
+
+struct GameState game = {.timerMax = 1500};
+
+struct DebounceState
+{
+  bool state;
+  bool lastState;
+  unsigned long lastTime; // the last time we got a reading that differs from the one that came before it
+};
+
+struct DebounceState button1Debounce;
+struct DebounceState button2Debounce;
+struct DebounceState leftDebounce;
+struct DebounceState rightDebounce;
+
 unsigned long debounceDelay = 30;
 
 int colors[] = {TS_8b_Blue, TS_8b_Red, TS_8b_Yellow};
@@ -66,6 +79,8 @@ void setup()
   USBDevice.init();
   USBDevice.attach();
   SerialUSB.begin(9600);
+
+  delay(1000);
 
   // Initialize the SD card
   if (!SD.begin(chipSelect, SD_SCK_MHZ(25)))
@@ -83,11 +98,6 @@ void setup()
   display.begin();
   display.setBrightness(10); // 0-15
   display.setFont(thinPixel7_10ptFontInfo);
-
-  // Read the high score from the SD card at the start
-  game.highScore = readHighScoreFromSD();
-
-  game.totalCorrect = 0; // Initialize totalCorrect
 
   pinMode(speakerPin, OUTPUT); // Initialize speaker pin
 
@@ -118,63 +128,87 @@ void playIncorrectSound()
   tone(speakerPin, 500, 100); // Lower pitch for incorrect answer
 }
 
-bool debounce(bool reading, bool* last, unsigned long* timer, bool* state) {
-  if (reading != *last) {
-    *timer = millis();
+bool debounce(bool reading, DebounceState *debounceState)
+{
+  if (reading != debounceState->lastState)
+  {
+    debounceState->lastTime = millis();
   }
 
   bool valueChanged = false;
-  if ((millis() - *timer) > debounceDelay) {
-    if (reading != *state) {
-      *state = reading;
+  if ((millis() - debounceState->lastTime) > debounceDelay)
+  {
+    if (reading != debounceState->state)
+    {
+      debounceState->state = reading;
       valueChanged = true;
     }
   }
 
-  *last = reading;
+  debounceState->lastState = reading;
   return valueChanged;
 }
 
 void checkInput()
 {
-  // These are only true once per press (they're "click handlers" but they trigger on press, not release)
-  bool button1Pressed = debounce(checkButton(TAButton1), &lastButtonState1, &lastDebounced1, &buttonState1) && buttonState1;
-  bool button2Pressed = debounce(checkButton(TAButton2), &lastButtonState2, &lastDebounced2, &buttonState2) && buttonState2;
+  // These are only true once per press (they're "click handlers" that trigger on press, not release)
+  bool button1Pressed = debounce(checkButton(TAButton1), &button1Debounce) && button1Debounce.state;
+  bool button2Pressed = debounce(checkButton(TAButton2), &button2Debounce) && button2Debounce.state;
+  bool leftStickPressed = debounce(checkJoystick(TAJoystickLeft), &leftDebounce) && leftDebounce.state;
+  bool rightStickPressed = debounce(checkJoystick(TAJoystickRight), &rightDebounce) && rightDebounce.state;
+
+  bool leftPressed = button1Pressed || leftStickPressed;
+  bool rightPressed = button2Pressed || rightStickPressed;
+
   if (screen == TUTORIAL)
   {
-    if ((tutorialStep == 3 || tutorialStep == 5)) {
-      if (button1Pressed) {
+    if ((tutorialStep == 3 || tutorialStep == 5))
+    {
+      if (leftPressed)
+      {
         nextTutorialStep();
       }
-    } else if (button2Pressed) {
+    }
+    else if (rightPressed)
+    {
       nextTutorialStep();
     }
   }
-  
-  if (screen == END && (button1Pressed || button2Pressed)) {
+
+  if (screen == END && (leftPressed || rightPressed))
+  {
     playBeep();
     game.level = 0;
     nextLevel();
   }
 
-  if (screen == GAMEPLAY) {
-    if (button2Pressed) {
+  if (screen == GAMEPLAY)
+  {
+    if (rightPressed)
+    {
       playBeep();
-      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape)) {
-         next(true);
-       } else {
-       next(false);
-       }
-    }
-    else if (button1Pressed) {
-      playBeep();
-      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape)) {
+      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape))
+      {
         next(true);
       }
-      else { next(false); }
+      else
+      {
+        next(false);
+      }
+    }
+    else if (leftPressed)
+    {
+      playBeep();
+      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape))
+      {
+        next(true);
+      }
+      else
+      {
+        next(false);
+      }
     }
   }
-
 }
 
 void updateTimer()
@@ -205,7 +239,6 @@ void next(bool wasCorrect)
   {
     playCorrectSound(); // Play correct sound
     game.correct++;
-    game.totalCorrect++; // Increment totalCorrect
   }
   else
   {
@@ -213,6 +246,7 @@ void next(bool wasCorrect)
     game.lives--;
     if (game.lives == 0)
     {
+      populateStats();
       gameOver();
       return;
     }
@@ -229,7 +263,8 @@ void next(bool wasCorrect)
   drawShapes();
 }
 
-void nextTutorialStep() {
+void nextTutorialStep()
+{
   tutorialStep++;
   displayTutorialStep();
   playBeep();
@@ -295,7 +330,7 @@ void displayTutorialStep()
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 55);
     display.print(tutorialStep3);
 
-    drawShape(true, TS_8b_Blue, 1);   // Left: Blue square
+    drawShape(true, TS_8b_Blue, 1);    // Left: Blue square
     drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
   }
   else if (tutorialStep == 4)
@@ -325,7 +360,7 @@ void displayTutorialStep()
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 55);
     display.print(tutorialStep5);
 
-    drawShape(true, TS_8b_Blue, 1); // Left: Blue square
+    drawShape(true, TS_8b_Blue, 1);  // Left: Blue square
     drawShape(false, TS_8b_Blue, 0); // Right: Blue triangle
   }
   else if (tutorialStep == 6)
@@ -339,13 +374,24 @@ void displayTutorialStep()
   }
 }
 
+void populateStats()
+{
+  stats[game.level - 1] = {.correct = game.correct, .incorrect = startingLives - game.lives};
+}
+
 void nextLevel()
 {
+  if (game.level >= 1)
+  {
+    populateStats();
+  }
+
   if (game.level == levels)
   {
     gameOver();
     return;
   }
+
   screen = GAMEPLAY;
   game.level++;
   game.lives = startingLives;
@@ -359,33 +405,62 @@ void nextLevel()
   drawShapes();
 }
 
+void printStatLine(struct LevelStats stats[], int xStart)
+{
+  const int levelHeight = 12;
+  const int gap = 2;
+  const int width = 6;
+
+  for (int i = 0; i < levels; i++)
+  {
+    if (stats[i].correct > 0 || stats[i].incorrect > 0)
+    { // if we got to this level
+      SerialUSB.print("Level ");
+      SerialUSB.print(i + 1);
+      SerialUSB.print(": ");
+      SerialUSB.print(stats[i].correct);
+      SerialUSB.print(" correct, ");
+      SerialUSB.print(stats[i].incorrect);
+      SerialUSB.println(" incorrect");
+      int bottom = SCREENHEIGHT - (levelHeight + gap) * i - 1;
+      int total = stats[i].correct + stats[i].incorrect;
+      int totalHeight = stats[i].correct >= threshold ? levelHeight : levelHeight / 2;
+      int correctPixels = rintf((float)stats[i].correct * totalHeight / total);
+      int incorrectPixels = rintf((float)stats[i].incorrect * totalHeight / total);
+      display.drawRect(xStart, bottom - 10, width, correctPixels, TSRectangleFilled, TS_8b_Green);
+      display.drawRect(xStart, bottom - 10 + correctPixels, width, incorrectPixels, TSRectangleFilled, TS_8b_Red);
+    }
+  }
+}
+
 void gameOver()
 {
   screen = END;
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
+  printStatLine(stats, 3);
   // Write the total score to the SD card
-  writeScoreToSD(game.totalCorrect);
-
-  // Update high score if necessary
-  if (game.totalCorrect > game.highScore)
-  {
-    game.highScore = game.totalCorrect;
-    SerialUSB.println("New high score!");
-  }
+  //  writeScoreToSD(game.totalCorrect);
+  //
+  //  // Update high score if necessary
+  //  if (game.totalCorrect > game.highScore)
+  //  {
+  //    game.highScore = game.totalCorrect;
+  //    SerialUSB.println("New high score!");
+  //  }
 
   if (game.lives == 0)
   {
     char *txt = "Game Over";
     display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
     display.print(txt);
-    txt = "You got to level ";
-    int width = display.getPrintWidth(txt) + display.getPrintWidth("2");
-    display.setCursor(SCREENWIDTH / 2 - width / 2, 25);
-    display.print(txt);
-    display.setCursor(SCREENWIDTH / 2 + display.getPrintWidth(txt) / 2, 25);
-    display.print(game.level);
+    // txt = "You got to level ";
+    // int width = display.getPrintWidth(txt) + display.getPrintWidth("2");
+    // display.setCursor(SCREENWIDTH / 2 - width / 2, 25);
+    // display.print(txt);
+    // display.setCursor(SCREENWIDTH / 2 + display.getPrintWidth(txt) / 2, 25);
+    // display.print(game.level);
   }
   else
   {
@@ -395,7 +470,8 @@ void gameOver()
   }
 
   // Display the high score
-  displayHighScore();
+  //  displayHighScore();
+  //  game.totalCorrect = 0;
 }
 
 void drawHUD()
@@ -563,17 +639,17 @@ int readHighScoreFromSD()
   }
 }
 
-void displayHighScore()
-{
-  display.fontColor(TS_8b_Yellow, TS_8b_Black);
-  String highScoreText = "High Score: " + String(game.highScore);
-
-  // Create a modifiable character array
-  char highScoreTextArray[30]; // Ensure the array is large enough
-  strcpy(highScoreTextArray, highScoreText.c_str());
-
-  int x = SCREENWIDTH / 2 - display.getPrintWidth(highScoreTextArray) / 2;
-  int y = SCREENHEIGHT - 15; // Adjust the position as needed
-  display.setCursor(x, y);
-  display.print(highScoreTextArray);
-}
+// void displayHighScore()
+//{
+//   display.fontColor(TS_8b_Yellow, TS_8b_Black);
+//   String highScoreText = "High Score: " + String(game.highScore);
+//
+//   // Create a modifiable character array
+//   char highScoreTextArray[30]; // Ensure the array is large enough
+//   strcpy(highScoreTextArray, highScoreText.c_str());
+//
+//   int x = SCREENWIDTH / 2 - display.getPrintWidth(highScoreTextArray) / 2;
+//   int y = SCREENHEIGHT - 15; // Adjust the position as needed
+//   display.setCursor(x, y);
+//   display.print(highScoreTextArray);
+// }
