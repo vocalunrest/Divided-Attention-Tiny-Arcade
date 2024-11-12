@@ -244,7 +244,7 @@ void drawTriangle(int x0, int y0, int height, int color, bool fill) {
     // Approximate sqrt(3) as 1732/1000
     int size = (2 * height * 1000) / 1732;
 
-    // Calculate the coordinates of the vertices
+    // the coordinates of the vertices
     int x1 = x0;
     int y1 = y0 - (2 * height) / 3; // Top vertex
 
@@ -294,5 +294,97 @@ void drawTriangle(int x0, int y0, int height, int color, bool fill) {
         display.drawLine(x1, y1, x2, y2, color); // Edge from Vertex 1 to Vertex 2
         display.drawLine(x2, y2, x3, y3, color); // Edge from Vertex 2 to Vertex 3
         display.drawLine(x3, y3, x1, y1, color); // Edge from Vertex 3 to Vertex 1
+    }
+}
+
+void drawPlus(int x, int y, int size, int thickness, int color, bool fill) {
+    int halfSize = size / 2;
+    int halfThickness = thickness / 2;
+
+    if (fill) {
+        // Fill the vertical rectangle
+        fillRect(x - halfThickness, y - halfSize, thickness, size, color);
+
+        // Fill the horizontal rectangle
+        fillRect(x - halfSize, y - halfThickness, size, thickness, color);
+    } else {
+        // Outline the vertical rectangle
+        drawRect(x - halfThickness, y - halfSize, thickness, size, color);
+
+        // Outline the horizontal rectangle
+        drawRect(x - halfSize, y - halfThickness, size, thickness, color);
+    }
+}
+
+void drawRect(int x, int y, int width, int height, int color) {
+    display.drawLine(x, y, x + width - 1, y, color);
+    display.drawLine(x, y + height - 1, x + width - 1, y + height - 1, color);
+    display.drawLine(x, y, x, y + height - 1, color);
+    display.drawLine(x + width - 1, y, x + width - 1, y + height - 1, color);
+}
+
+void drawStar(int x, int y, int size, int color, bool fill) {
+    // Calculate the coordinates of the vertices
+    float angle = PI / 5; // 36 degrees
+    int outerRadius = size / 2;
+    int innerRadius = outerRadius * 0.5; 
+    int vertices[10][2];
+    for (int i = 0; i < 10; i++) {
+        float r = (i % 2 == 0) ? outerRadius : innerRadius;
+        vertices[i][0] = x + r * cos(i * angle - PI / 2);
+        vertices[i][1] = y + r * sin(i * angle - PI / 2);
+    }
+
+    if (fill) {
+        // Fill the star by drawing triangles between the center and the vertices
+        for (int i = 0; i < 10; i++) {
+            int next = (i + 1) % 10;
+            fillTriangle(x, y, vertices[i][0], vertices[i][1], vertices[next][0], vertices[next][1], color);
+        }
+    } else {
+        // Outline the star by drawing lines between the vertices
+        for (int i = 0; i < 10; i++) {
+            int next = (i + 1) % 10;
+            display.drawLine(vertices[i][0], vertices[i][1], vertices[next][0], vertices[next][1], color);
+        }
+    }
+}
+
+void fillTriangle(int x0, int y0, int x1, int y1, int x2, int y2, int color) {
+    // Find the bounding box of the triangle
+    int minX = min(x0, min(x1, x2));
+    int maxX = max(x0, max(x1, x2));
+    int minY = min(y0, min(y1, y2));
+    int maxY = max(y0, max(y1, y2));
+
+    // Loop over each scanline within the triangle's bounding box
+    for (int y = minY; y <= maxY; y++) {
+        // Initialize intersection points
+        int xStart = maxX;
+        int xEnd = minX;
+
+        // Edge from Vertex 0 to Vertex 1
+        if ((y - y0) * (y - y1) <= 0 && y0 != y1) {
+            int x = x0 + (x1 - x0) * (y - y0) / (y1 - y0);
+            xStart = min(xStart, x);
+            xEnd = max(xEnd, x);
+        }
+
+        // Edge from Vertex 1 to Vertex 2
+        if ((y - y1) * (y - y2) <= 0 && y1 != y2) {
+            int x = x1 + (x2 - x1) * (y - y1) / (y2 - y1);
+            xStart = min(xStart, x);
+            xEnd = max(xEnd, x);
+        }
+
+        // Edge from Vertex 2 to Vertex 0
+        if ((y - y2) * (y - y0) <= 0 && y2 != y0) {
+            int x = x2 + (x0 - x2) * (y - y2) / (y0 - y2);
+            xStart = min(xStart, x);
+            xEnd = max(xEnd, x);
+        }
+
+        // Draw a horizontal line between xStart and xEnd
+        display.drawLine(xStart, y, xEnd, y, color);
     }
 }
