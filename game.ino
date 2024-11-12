@@ -165,24 +165,19 @@ void checkInput()
 
   bool leftPressed = button1Pressed || leftStickPressed;
   bool rightPressed = button2Pressed || rightStickPressed;
-
+  
   if (screen == TUTORIAL)
   {
-    if ((tutorialStep == 3 || tutorialStep == 5))
-    {
-      if (leftPressed)
-      {
+    if ((tutorialStep == 6 || tutorialStep == 9)) {
+      if (leftPressed) {
         nextTutorialStep();
       }
-    }
-    else if (rightPressed)
-    {
+    } else if (rightPressed) {
       nextTutorialStep();
     }
   }
-
-  if (screen == END && (leftPressed || rightPressed))
-  {
+  
+  if (screen == END && (leftPressed || rightPressed)) {
     playBeep();
     game.level = 0;
     nextLevel();
@@ -274,7 +269,7 @@ void nextTutorialStep()
   tutorialStep++;
   displayTutorialStep();
   playBeep();
-  if (tutorialStep > 6)
+  if (tutorialStep > 10)
   {
     nextLevel();
   }
@@ -285,98 +280,48 @@ void displayTutorialStep()
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
-  if (tutorialStep == 0)
-  {
-    char *tutorial = "Welcome!";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorial) / 2, 15);
-    display.print(tutorial);
-    tutorial = "[Press right]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorial) / 2, 55);
-    display.print(tutorial);
-  }
-  else if (tutorialStep == 1)
-  {
-    char *tutorialStep1 = "Buttons:";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep1) / 2, 2);
-    display.print(tutorialStep1);
-    tutorialStep1 = "Right = Match";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep1) / 2, 22);
-    display.print(tutorialStep1);
-    tutorialStep1 = "Left = Mismatch";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep1) / 2, 32);
-    display.print(tutorialStep1);
-    tutorialStep1 = "[Press right]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep1) / 2, 55);
-    display.print(tutorialStep1);
-  }
-  else if (tutorialStep == 2)
-  {
-    char *tutorialStep2 = "Level 1:";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep2) / 2, 2);
-    display.print(tutorialStep2);
-    tutorialStep2 = "Matching Colors";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep2) / 2, 10);
-    display.print(tutorialStep2);
-    tutorialStep2 = "[Right = Match]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep2) / 2, 55);
-    display.print(tutorialStep2);
+  struct TutorialText {
+      const char* text;
+      int yPos;
+  };
 
-    drawShape(true, TS_8b_Yellow, 1);  // Left: Yellow square
-    drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
-  }
-  else if (tutorialStep == 3)
-  {
-    char *tutorialStep3 = "Level 1:";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 2);
-    display.print(tutorialStep3);
-    tutorialStep3 = "Matching Colors";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 10);
-    display.print(tutorialStep3);
-    tutorialStep3 = "[Left = Mismatch]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep3) / 2, 55);
-    display.print(tutorialStep3);
-
-    drawShape(true, TS_8b_Blue, 1);    // Left: Blue square
-    drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
-  }
-  else if (tutorialStep == 4)
-  {
-    char *tutorialStep4 = "Level 2:";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep4) / 2, 2);
-    display.print(tutorialStep4);
-    tutorialStep4 = "Matching Shapes";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep4) / 2, 10);
-    display.print(tutorialStep4);
-    tutorialStep4 = "[Right = Match]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep4) / 2, 55);
-    display.print(tutorialStep4);
-
-    drawShape(true, TS_8b_Blue, 0); // Left: Blue triangle
-    drawShape(false, TS_8b_Red, 0); // Right: Red triangle
-  }
-  else if (tutorialStep == 5)
-  {
-    char *tutorialStep5 = "Level 2:";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 2);
-    display.print(tutorialStep5);
-    tutorialStep5 = "Matching Shapes";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 10);
-    display.print(tutorialStep5);
-    tutorialStep5 = "[Left = Mismatch]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep5) / 2, 55);
-    display.print(tutorialStep5);
-
-    drawShape(true, TS_8b_Blue, 1);  // Left: Blue square
-    drawShape(false, TS_8b_Blue, 0); // Right: Blue triangle
-  }
-  else if (tutorialStep == 6)
-  {
-    char *tutorialStep6 = "Start Game!";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep6) / 2, 15);
-    display.print(tutorialStep6);
-    tutorialStep6 = "[Press right]";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(tutorialStep6) / 2, 55);
-    display.print(tutorialStep6);
+  TutorialText tutorialSteps[11][5] = {
+      {{"Cognitive Therapy", 5}, {"Game", 15}, {"Improving", 30}, {"Focus & Memory", 40}, {"[Press right]", 55}},
+      {{"Our goal is to", 12}, {"improve cognitive", 22}, {"skills like focus", 32}, {"and attention!", 42}, {"[Press right]", 55}},
+      {{"Play to train your", 12}, {"brain & Practice", 22}, {"important skills!", 32}, {"", 0}, {"[Press right]", 55}},
+      {{"Buttons:", 2}, {"Right = Match", 22}, {"Left = Mismatch", 32}, {"", 0}, {"[Press right]", 55}},
+      {{"Level 1: Colors", 2}, {"Keep your focus", 22}, {"on the color", 32}, {"of objects", 42}, {"[Press right]", 55}},
+      {{"Level 1: Colors", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
+      {{"Level 1: Colors", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
+      {{"Level 2: Shapes", 2}, {"Keep your focus", 22}, {"on the shapes", 32}, {"of objects", 42}, {"[Press right]", 55}},
+      {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
+      {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
+      {{"Start Game!", 15}, {"", 0}, {"", 0}, {"", 0}, {"[Press right]", 55}}
+  };
+  
+  int length = sizeof(tutorialSteps[tutorialStep]) / sizeof(tutorialSteps[tutorialStep][0]);
+  for (int i = 0; i < length; i++) {
+      if (strlen(tutorialSteps[tutorialStep][i].text) > 0) {
+          int setCursor = SCREENWIDTH / 2 - display.getPrintWidth((char*)tutorialSteps[tutorialStep][i].text) / 2;
+          display.setCursor(setCursor, tutorialSteps[tutorialStep][i].yPos);
+          display.print(tutorialSteps[tutorialStep][i].text);
+          if (tutorialStep == 5){
+            drawShape(true, TS_8b_Yellow, 1);  // Left: Yellow square
+            drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
+          }
+          else if (tutorialStep == 6) {
+            drawShape(true, TS_8b_Blue, 1);  // Left: Blue square
+            drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
+          }
+          else if (tutorialStep == 8) {
+            drawShape(true, TS_8b_Blue, 0); // Left: Blue triangle
+            drawShape(false, TS_8b_Red, 0); // Right: Red triangle
+          }
+          else if (tutorialStep == 9) {
+            drawShape(true, TS_8b_Blue, 1); // Left: Blue square
+            drawShape(false, TS_8b_Blue, 0); // Right: Blue triangle
+          }
+      }
   }
 }
 
@@ -447,12 +392,13 @@ void gameOver()
 
   readStatsFromSD();
   for (int i = 0; i < historySize; i++) {
-    SerialUSB.println("for loop");
     printStatLine(history[i], (historySize - i - 1) * 8);
   }
 
   printStatLine(stats, historySize * 8);
-  display.drawLine(historySize * 8 - 2, SCREENHEIGHT - 1, historySize * 8 + 8, SCREENHEIGHT - 1, TS_8b_Yellow);
+  if (historySize > 0) {
+    display.drawLine(historySize * 8 - 2, SCREENHEIGHT - 1, historySize * 8 + 8, SCREENHEIGHT - 1, TS_8b_Yellow);
+  }
   writeStatsToSD();
   // Write the total score to the SD card
   //  writeScoreToSD(game.totalCorrect);
@@ -586,11 +532,13 @@ void randomSquare(bool left, int color)
   int w = 28;
   if (random(2) == 0)
   {
-    display.drawRect(x, y, w, w, TSRectangleNoFill, color);
-    display.drawRect(x + 4, y + 4, w - 8, w - 8, TSRectangleNoFill, color);
+    drawRoundedRect(x, y, w, w, 5, color, false);
+    // drawSprite(int x, int y, int width, int height, int radius, int color, bool fill) {
+    drawRoundedRect((x + 4), (y + 4), (w - 8), (w - 8), 5, color, false);
     return;
   }
-  display.drawRect(x, y, w, w, TSRectangleFilled, color);
+  drawRoundedRect(x, y, w, w, 5, color, true);
+
 }
 
 void randomCircle(bool left, int color)
@@ -660,12 +608,7 @@ void readStatsFromSD() {
             String incorrectStr = statString.substring(commaPos + 1);
             int correct = correctStr.toInt();
             int incorrect = incorrectStr.toInt();
-            SerialUSB.print("Parsed:");
-            SerialUSB.print(correct);
-            SerialUSB.print(",");
-            SerialUSB.print(incorrect);
-            SerialUSB.println(";");
-    
+
             history[historySize][statCount].correct = correct;
             history[historySize][statCount].incorrect = incorrect;
             statCount++;
