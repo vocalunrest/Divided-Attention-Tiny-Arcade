@@ -49,7 +49,7 @@ struct LevelStats
 
 struct LevelStats stats[levels];
 
-int const maxHistory = 5; // the max # of previous session stats to load
+int const maxHistory = 9; // the max # of previous session stats to load
 LevelStats history[maxHistory][levels];
 int historySize = 0; // how many previous sessions were actually loaded
 
@@ -95,6 +95,8 @@ void setup()
   else
   {
     SerialUSB.println("SD card initialized.");
+//    SD.remove("stats.txt");
+    printFile("stats.txt");
   }
 
   randomSeed(analogRead(2));
@@ -411,21 +413,28 @@ void nextLevel()
 
 void printStatLine(struct LevelStats stats[], int xStart)
 {
-  const int levelHeight = 12;
+  const int levelHeight = 20;
+  const int incompleteLevelHeight = 15;
   const int gap = 2;
   const int width = 6;
+  const int fromBottom = 2;
 
+  SerialUSB.println("Printing statline " + xStart);
   for (int i = 0; i < levels; i++)
   {
     if (stats[i].correct > 0 || stats[i].incorrect > 0)
     { // if we got to this level
-      int bottom = SCREENHEIGHT - (levelHeight + gap) * i - 1;
+      int bottom = SCREENHEIGHT - (levelHeight + gap) * i - fromBottom;
       int total = stats[i].correct + stats[i].incorrect;
-      int totalHeight = stats[i].correct >= threshold ? levelHeight : levelHeight / 2;
+      int totalHeight = stats[i].correct >= threshold ? levelHeight : incompleteLevelHeight;
       int correctPixels = rintf((float)stats[i].correct * totalHeight / total);
       int incorrectPixels = rintf((float)stats[i].incorrect * totalHeight / total);
-      display.drawRect(xStart, bottom - 10, width, correctPixels, TSRectangleFilled, TS_8b_Green);
-      display.drawRect(xStart, bottom - 10 + correctPixels, width, incorrectPixels, TSRectangleFilled, TS_8b_Red);
+      if (correctPixels > 0) {
+        display.drawRect(xStart, bottom - totalHeight, width, correctPixels, TSRectangleFilled, TS_8b_Green);
+      }
+      if (incorrectPixels > 0) {
+        display.drawRect(xStart, bottom - totalHeight + correctPixels, width, incorrectPixels, TSRectangleFilled, TS_8b_Red);
+      }
     }
   }
 }
@@ -436,11 +445,14 @@ void gameOver()
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
-  printStatLine(stats, 3);
   readStatsFromSD();
   for (int i = 0; i < historySize; i++) {
-    printStatLine(history[i], i * 8);
+    SerialUSB.println("for loop");
+    printStatLine(history[i], (historySize - i - 1) * 8);
   }
+
+  printStatLine(stats, historySize * 8);
+  display.drawLine(historySize * 8 - 2, SCREENHEIGHT - 1, historySize * 8 + 8, SCREENHEIGHT - 1, TS_8b_Yellow);
   writeStatsToSD();
   // Write the total score to the SD card
   //  writeScoreToSD(game.totalCorrect);
@@ -599,17 +611,27 @@ void writeStatsToSD() {
 
   if (file)
   {
+    file.seek(0);
+    // Copy the file, prepend the new line, then overwrite the file
+    String prev = "";
+    while (file.available()) {
+      prev += file.readStringUntil('\n') + '\n';
+    }
+    String next = "";
     for (int i = 0; i < levels; i++) {
       if (stats[i].correct > 0 || stats[i].incorrect > 0) {
-        file.print(stats[i].correct);
-        file.print(",");
-        file.print(stats[i].incorrect);
-        file.print(";");
+        next.concat(stats[i].correct);
+        next.concat(",");
+        next.concat(stats[i].incorrect);
+        next.concat(";");
       }
     }
-    file.println();
+    file.seek(0);
+    file.println(next);
+    file.print(prev);
     file.close();
-    SerialUSB.println("Stats written to SD card.");
+    SerialUSB.print("Stats written to SD card: ");
+    SerialUSB.println(next);
   }
   else
   {
@@ -617,14 +639,12 @@ void writeStatsToSD() {
   }
 }
 
-
 void readStatsFromSD() {
   File file = SD.open("stats.txt");
   if (file) {
     historySize = 0;
     while (file.available() && historySize < maxHistory) {
       String line = file.readStringUntil('\n');
-      SerialUSB.println(line);
       int statCount = 0;
       int lastPos = 0;
       int pos = 0;
@@ -640,6 +660,7 @@ void readStatsFromSD() {
             String incorrectStr = statString.substring(commaPos + 1);
             int correct = correctStr.toInt();
             int incorrect = incorrectStr.toInt();
+            SerialUSB.print("Parsed:");
             SerialUSB.print(correct);
             SerialUSB.print(",");
             SerialUSB.print(incorrect);
@@ -659,6 +680,24 @@ void readStatsFromSD() {
     // Handle error opening file
     SerialUSB.println("Error opening stats.txt");
   }
+}
+
+//For testing
+void printFile(char* filename) {
+  File file = SD.open(filename);
+  if (file) {
+    SerialUSB.print("Printing ");
+    SerialUSB.println(filename);
+    while(file.available()) {
+      String line = file.readStringUntil('\n');
+      SerialUSB.println(line);
+    }
+    SerialUSB.println("----");
+    file.close();
+    return;
+  } 
+  SerialUSB.print(filename);
+  SerialUSB.println(" does not exist");
 }
 
 // int readHighScoreFromSD()
