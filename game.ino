@@ -49,9 +49,11 @@ struct LevelStats
 
 struct LevelStats stats[levels];
 
-int const maxHistory = 9; // the max # of previous session stats to load
-LevelStats history[maxHistory][levels];
+int const maxHistory = 11; // the max # of session bars to show (includes both SD history and current session)
+LevelStats history[maxHistory][levels]; // stats loaded from SD card
+LevelStats currentSession[maxHistory][levels]; // stats from games played this session
 int historySize = 0; // how many previous sessions were actually loaded
+int currentSessionSize = 0; // how many games were played this session
 
 int tutorialStep = 0;
 
@@ -97,6 +99,7 @@ void setup()
     SerialUSB.println("SD card initialized.");
 //    SD.remove("stats.txt");
     printFile("stats.txt");
+    readStatsFromSD();
   }
 
   randomSeed(analogRead(2));
@@ -356,7 +359,7 @@ void nextLevel()
   drawShapes();
 }
 
-void printStatLine(struct LevelStats stats[], int xStart)
+void printStatBar(struct LevelStats stats[], int xStart)
 {
   const int levelHeight = 20;
   const int incompleteLevelHeight = 15;
@@ -390,25 +393,24 @@ void gameOver()
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
-  readStatsFromSD();
-  for (int i = 0; i < historySize; i++) {
-    printStatLine(history[i], (historySize - i - 1) * 8);
+  memcpy(currentSession[currentSessionSize++], stats, sizeof(stats));
+
+  int totalBars = min(currentSessionSize + historySize, maxHistory);
+  int sessionBars = min(currentSessionSize, totalBars);
+  
+  for (int i = 0; i < sessionBars; i++) {
+    printStatBar(currentSession[sessionBars - i - 1], (totalBars - i - 1) * 8);
   }
 
-  printStatLine(stats, historySize * 8);
-  if (historySize > 0) {
-    display.drawLine(historySize * 8 - 2, SCREENHEIGHT - 1, historySize * 8 + 8, SCREENHEIGHT - 1, TS_8b_Yellow);
+  for (int i = 0; i < totalBars - sessionBars; i++) {
+    printStatBar(history[i], (totalBars - sessionBars - i - 1) * 8);
   }
+
+  if (totalBars > 0) {
+    display.drawLine((totalBars - 1)* 8, SCREENHEIGHT - 1, (totalBars - 1) * 8 + 6, SCREENHEIGHT - 1, TS_8b_Yellow);
+  }
+  
   writeStatsToSD();
-  // Write the total score to the SD card
-  //  writeScoreToSD(game.totalCorrect);
-  //
-  //  // Update high score if necessary
-  //  if (game.totalCorrect > game.highScore)
-  //  {
-  //    game.highScore = game.totalCorrect;
-  //    SerialUSB.println("New high score!");
-  //  }
 
   if (game.lives == 0)
   {
