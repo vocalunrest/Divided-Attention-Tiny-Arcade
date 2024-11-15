@@ -26,11 +26,16 @@ enum Screen screen = TUTORIAL;
 const int threshold = 15; // how many correct answers to progress to the next level
 const int levels = 2;
 const int startingLives = 10;
+// depending on player perfomance, timer will range from
+// [timerBase * (1 - timerSpread / 2), timerBase * (1 + timerSpread / 2)]
+const float timerBase = 1500; // milliseconds
+const float timerSpread = 1; 
+
 char *prompts[] = {"Same color", "Same shape"};
 
 struct GameState
 {
-  int timerMax;         // how long, in milliseconds, do we have to answer
+  float timerMax;         // how long, in milliseconds, do we have to answer
   int timerStartMillis; // when did we start the timer
   int timerX;           // the last drawn X position of the timer
   bool shapesHidden;    // we hide the shapes halfway through the timer; have we done it yet?
@@ -50,14 +55,14 @@ struct LevelStats
 struct LevelStats stats[levels];
 
 int const maxHistory = 11; // the max # of session bars to show (includes both SD history and current session)
-LevelStats history[maxHistory][levels]; // stats loaded from SD card
-LevelStats currentSession[maxHistory][levels]; // stats from games played this session
+LevelStats history[maxHistory][levels]; // stats loaded from SD card. newest --> oldest
+LevelStats currentSession[maxHistory][levels]; // stats from games played this session. oldest --> newest
 int historySize = 0; // how many previous sessions were actually loaded
 int currentSessionSize = 0; // how many games were played this session
 
 int tutorialStep = 0;
 
-struct GameState game = {.timerMax = 1500};
+struct GameState game;
 
 struct DebounceState
 {
@@ -92,7 +97,6 @@ void setup()
   if (!SD.begin(chipSelect, SD_SCK_MHZ(25)))
   {
     SerialUSB.println("SD card initialization failed!");
-    // Handle error accordingly (e.g., disable SD card functionality)
   }
   else
   {
@@ -100,6 +104,7 @@ void setup()
 //    SD.remove("stats.txt");
     printFile("stats.txt");
     readStatsFromSD();
+    adjustDifficulty();
   }
 
   randomSeed(analogRead(2));
@@ -267,6 +272,40 @@ void next(bool wasCorrect)
   drawShapes();
 }
 
+// Run this after currentSession has been populated with the latest stats
+void adjustDifficulty() {
+  if (historySize == 0 && currentSessionSize == 0) {
+    return;
+  }
+  const int averageTheLast = 3;
+  LevelStats lastStats[averageTheLast][levels];
+  int numCurrentStats = min(averageTheLast, currentSessionSize);
+  for (int i = 0; i < numCurrentStats; i++) {
+    memcpy(lastStats[i], currentSession[currentSessionSize - i - 1], sizeof(currentSession[currentSessionSize - i - 1]));
+  }
+  for (int i = 0; i < averageTheLast - numCurrentStats; i++) {
+    memcpy(lastStats[numCurrentStats + i], history[i], sizeof(history[i]));
+  }
+  int totalCorrect = 0;
+  int totalIncorrect = 0;
+
+  for (int i = 0; i < min(averageTheLast, currentSessionSize + historySize); i++) {
+    for (int l = 0; l < levels; l++) {
+      int correct = lastStats[i][l].correct;
+      int incorrect = lastStats[i][l].incorrect;
+      if (correct > 0 || incorrect > 0) {
+        totalCorrect += correct;
+        totalIncorrect += incorrect;
+      }
+    }
+  }
+  
+  float averageAccuracy = (float)totalCorrect / (totalCorrect + totalIncorrect);
+  game.timerMax = timerBase * ((1 + timerSpread / 2) - (averageAccuracy * timerSpread));
+  SerialUSB.println(averageAccuracy);
+  SerialUSB.println(game.timerMax);
+}
+
 void nextTutorialStep()
 {
   tutorialStep++;
@@ -361,8 +400,8 @@ void nextLevel()
 
 void printStatBar(struct LevelStats stats[], int xStart)
 {
-  const int levelHeight = 20;
-  const int incompleteLevelHeight = 15;
+  const int levelHeight = 15;
+  const int incompleteLevelHeight = 12;
   const int gap = 2;
   const int width = 6;
   const int fromBottom = 2;
@@ -411,31 +450,30 @@ void gameOver()
   }
   
   writeStatsToSD();
+  
+  adjustDifficulty();
 
   if (game.lives == 0)
   {
     char *txt = "Game Over";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
+    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 5);
     display.print(txt);
-    // txt = "You got to level ";
-    // int width = display.getPrintWidth(txt) + display.getPrintWidth("2");
-    // display.setCursor(SCREENWIDTH / 2 - width / 2, 25);
-    // display.print(txt);
-    // display.setCursor(SCREENWIDTH / 2 + display.getPrintWidth(txt) / 2, 25);
-    // display.print(game.level);
   }
   else
   {
     char *txt = "You win";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
+    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 5);
     display.print(txt);
   }
 
+  char* txt = "New timer: ";
+  int width = display.getPrintWidth(txt) + display.getPrintWidth("2.22");
+  display.setCursor(SCREENWIDTH / 2 - width / 2, 18);
+  display.print(txt);
+  display.setCursor(SCREENWIDTH / 2 - width / 2 + display.getPrintWidth(txt), 18);
+  display.print(rintf(game.timerMax / 10) / 100);
+  
   memset(stats, 0, sizeof stats);
-
-  // Display the high score
-  //  displayHighScore();
-  //  game.totalCorrect = 0;
 }
 
 void drawHUD()
