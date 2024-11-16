@@ -9,7 +9,7 @@ TinyScreen display = TinyScreen(TinyScreenPlus);
 #define SCREENWIDTH 94
 #define SCREENHEIGHT 64
 
-SdFat SD; // SD card object
+SdFat SD;                      // SD card object
 const uint8_t chipSelect = 10; // SD card chip select pin set to 10
 
 const int speakerPin = A0; // Speaker pin
@@ -23,9 +23,19 @@ enum Screen
 
 enum Screen screen = TUTORIAL;
 
+const int threshold = 15; // how many correct answers to progress to the next level
+const int levels = 2;
+const int startingLives = 10;
+// depending on player perfomance, timer will range from
+// [timerBase * (1 - timerSpread / 2), timerBase * (1 + timerSpread / 2)]
+const float timerBase = 1500; // milliseconds
+const float timerSpread = 1; 
+
+char *prompts[] = {"Same color", "Same shape"};
+
 struct GameState
 {
-  int timerMax;         // how long, in milliseconds, do we have to answer
+  float timerMax;         // how long, in milliseconds, do we have to answer
   int timerStartMillis; // when did we start the timer
   int timerX;           // the last drawn X position of the timer
   bool shapesHidden;    // we hide the shapes halfway through the timer; have we done it yet?
@@ -33,23 +43,32 @@ struct GameState
   bool currSameColor;
   int lives;
   int correct;
-  int totalCorrect;     // New variable for total correct answers
   int level;
-  int highScore;        // high score tracking
 };
 
-struct GameState game = {.timerMax = 1500};
+struct LevelStats
+{
+  int correct;
+  int incorrect;
+};
+
+struct LevelStats stats[levels];
+
+int const maxHistory = 11; // the max # of session bars to show (includes both SD history and current session)
+LevelStats history[maxHistory][levels]; // stats loaded from SD card. newest --> oldest
+LevelStats currentSession[maxHistory][levels]; // stats from games played this session. oldest --> newest
+int historySize = 0; // how many previous sessions were actually loaded
+int currentSessionSize = 0; // how many games were played this session
+
 int tutorialStep = 0;
-int threshold = 15; // how many correct answers to progress to the next level
-int startingLives = 10;
-int levels = 2;
-char *prompts[] = {"Same color", "Same shape"};
+
+struct GameState game;
 
 struct DebounceState
 {
   bool state;
   bool lastState;
-  unsigned long lastTime; //the last time we got a reading that differs from the one that came before it
+  unsigned long lastTime; // the last time we got a reading that differs from the one that came before it
 };
 
 struct DebounceState button1Debounce;
@@ -78,11 +97,14 @@ void setup()
   if (!SD.begin(chipSelect, SD_SCK_MHZ(25)))
   {
     SerialUSB.println("SD card initialization failed!");
-    // Handle error accordingly (e.g., disable SD card functionality)
   }
   else
   {
     SerialUSB.println("SD card initialized.");
+//    SD.remove("stats.txt");
+    printFile("stats.txt");
+    readStatsFromSD();
+    adjustDifficulty();
   }
 
   randomSeed(analogRead(2));
@@ -90,13 +112,6 @@ void setup()
   display.begin();
   display.setBrightness(10); // 0-15
   display.setFont(thinPixel7_10ptFontInfo);
-
-  // Read the high score from the SD card at the start
-  game.highScore = readHighScoreFromSD();
-  SerialUSB.print("Existing High Score: ");
-  SerialUSB.print(String(game.highScore));
-
-  game.totalCorrect = 0; // Initialize totalCorrect
 
   pinMode(speakerPin, OUTPUT); // Initialize speaker pin
 
@@ -127,14 +142,18 @@ void playIncorrectSound()
   tone(speakerPin, 500, 100); // Lower pitch for incorrect answer
 }
 
-bool debounce(bool reading, DebounceState *debounceState) {
-  if (reading != debounceState->lastState) {
+bool debounce(bool reading, DebounceState *debounceState)
+{
+  if (reading != debounceState->lastState)
+  {
     debounceState->lastTime = millis();
   }
 
   bool valueChanged = false;
-  if ((millis() - debounceState->lastTime) > debounceDelay) {
-    if (reading != debounceState->state) {
+  if ((millis() - debounceState->lastTime) > debounceDelay)
+  {
+    if (reading != debounceState->state)
+    {
       debounceState->state = reading;
       valueChanged = true;
     }
@@ -172,24 +191,33 @@ void checkInput()
     nextLevel();
   }
 
-  if (screen == GAMEPLAY) {
-    if (rightPressed) {
+  if (screen == GAMEPLAY)
+  {
+    if (rightPressed)
+    {
       playBeep();
-      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape)) {
-         next(true);
-       } else {
-       next(false);
-       }
-    }
-    else if (leftPressed) {
-      playBeep();
-      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape)) {
+      if ((game.level == 1 && game.currSameColor) || (game.level == 2 && game.currSameShape))
+      {
         next(true);
       }
-      else { next(false); }
+      else
+      {
+        next(false);
+      }
+    }
+    else if (leftPressed)
+    {
+      playBeep();
+      if ((game.level == 1 && !game.currSameColor) || (game.level == 2 && !game.currSameShape))
+      {
+        next(true);
+      }
+      else
+      {
+        next(false);
+      }
     }
   }
-
 }
 
 void updateTimer()
@@ -220,7 +248,6 @@ void next(bool wasCorrect)
   {
     playCorrectSound(); // Play correct sound
     game.correct++;
-    game.totalCorrect++; // Increment totalCorrect
   }
   else
   {
@@ -228,6 +255,7 @@ void next(bool wasCorrect)
     game.lives--;
     if (game.lives == 0)
     {
+      populateStats();
       gameOver();
       return;
     }
@@ -244,7 +272,42 @@ void next(bool wasCorrect)
   drawShapes();
 }
 
-void nextTutorialStep() {
+// Run this after currentSession has been populated with the latest stats
+void adjustDifficulty() {
+  if (historySize == 0 && currentSessionSize == 0) {
+    return;
+  }
+  const int averageTheLast = 3;
+  LevelStats lastStats[averageTheLast][levels];
+  int numCurrentStats = min(averageTheLast, currentSessionSize);
+  for (int i = 0; i < numCurrentStats; i++) {
+    memcpy(lastStats[i], currentSession[currentSessionSize - i - 1], sizeof(currentSession[currentSessionSize - i - 1]));
+  }
+  for (int i = 0; i < averageTheLast - numCurrentStats; i++) {
+    memcpy(lastStats[numCurrentStats + i], history[i], sizeof(history[i]));
+  }
+  int totalCorrect = 0;
+  int totalIncorrect = 0;
+
+  for (int i = 0; i < min(averageTheLast, currentSessionSize + historySize); i++) {
+    for (int l = 0; l < levels; l++) {
+      int correct = lastStats[i][l].correct;
+      int incorrect = lastStats[i][l].incorrect;
+      if (correct > 0 || incorrect > 0) {
+        totalCorrect += correct;
+        totalIncorrect += incorrect;
+      }
+    }
+  }
+  
+  float averageAccuracy = (float)totalCorrect / (totalCorrect + totalIncorrect);
+  game.timerMax = timerBase * ((1 + timerSpread / 2) - (averageAccuracy * timerSpread));
+  SerialUSB.println(averageAccuracy);
+  SerialUSB.println(game.timerMax);
+}
+
+void nextTutorialStep()
+{
   tutorialStep++;
   displayTutorialStep();
   playBeep();
@@ -270,11 +333,11 @@ void displayTutorialStep()
       {{"Play to train your", 12}, {"brain & Practice", 22}, {"important skills!", 32}, {"", 0}, {"[Press right]", 55}},
       {{"Buttons:", 2}, {"Right = Match", 22}, {"Left = Mismatch", 32}, {"", 0}, {"[Press right]", 55}},
       {{"Level 1: Colors", 2}, {"Keep your focus", 22}, {"on the color", 32}, {"of objects", 42}, {"[Press right]", 55}},
-      {{"Level 1: Colors", 2}, {"Possible cenarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
-      {{"Level 1: Colors", 2}, {"Possible cenarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
+      {{"Level 1: Colors", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
+      {{"Level 1: Colors", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
       {{"Level 2: Shapes", 2}, {"Keep your focus", 22}, {"on the shapes", 32}, {"of objects", 42}, {"[Press right]", 55}},
-      {{"Level 2: Shapes", 2}, {"Possible cenarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
-      {{"Level 2: Shapes", 2}, {"Possible cenarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
+      {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
+      {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
       {{"Start Game!", 15}, {"", 0}, {"", 0}, {"", 0}, {"[Press right]", 55}}
   };
   
@@ -322,13 +385,24 @@ void flashScreen(int color, int duration){
   display.clearWindow(0, 0, SCREENWIDTH, SCREENHEIGHT); 
 }
 
+void populateStats()
+{
+  stats[game.level - 1] = {.correct = game.correct, .incorrect = startingLives - game.lives};
+}
+
 void nextLevel()
 {
+  if (game.level >= 1)
+  {
+    populateStats();
+  }
+
   if (game.level == levels)
   {
     gameOver();
     return;
   }
+
   screen = GAMEPLAY;
   flashScreen(TS_8b_Blue, 1000);
   game.level++;
@@ -343,43 +417,82 @@ void nextLevel()
   drawShapes();
 }
 
+void printStatBar(struct LevelStats stats[], int xStart)
+{
+  const int levelHeight = 15;
+  const int incompleteLevelHeight = 12;
+  const int gap = 2;
+  const int width = 6;
+  const int fromBottom = 2;
+
+  SerialUSB.println("Printing statline " + xStart);
+  for (int i = 0; i < levels; i++)
+  {
+    if (stats[i].correct > 0 || stats[i].incorrect > 0)
+    { // if we got to this level
+      int bottom = SCREENHEIGHT - (levelHeight + gap) * i - fromBottom;
+      int total = stats[i].correct + stats[i].incorrect;
+      int totalHeight = stats[i].correct >= threshold ? levelHeight : incompleteLevelHeight;
+      int correctPixels = rintf((float)stats[i].correct * totalHeight / total);
+      int incorrectPixels = rintf((float)stats[i].incorrect * totalHeight / total);
+      if (correctPixels > 0) {
+        display.drawRect(xStart, bottom - totalHeight, width, correctPixels, TSRectangleFilled, TS_8b_Green);
+      }
+      if (incorrectPixels > 0) {
+        display.drawRect(xStart, bottom - totalHeight + correctPixels, width, incorrectPixels, TSRectangleFilled, TS_8b_Red);
+      }
+    }
+  }
+}
+
 void gameOver()
 {
   screen = END;
   display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
-  // Write the total score to the SD card
-  writeScoreToSD(game.totalCorrect);
+  memcpy(currentSession[currentSessionSize++], stats, sizeof(stats));
 
-  // Update high score if necessary
-  if (game.totalCorrect > game.highScore)
-  {
-    game.highScore = game.totalCorrect;
-    SerialUSB.println("New high score!");
+  int totalBars = min(currentSessionSize + historySize, maxHistory);
+  int sessionBars = min(currentSessionSize, totalBars);
+  
+  for (int i = 0; i < sessionBars; i++) {
+    printStatBar(currentSession[sessionBars - i - 1], (totalBars - i - 1) * 8);
   }
+
+  for (int i = 0; i < totalBars - sessionBars; i++) {
+    printStatBar(history[i], (totalBars - sessionBars - i - 1) * 8);
+  }
+
+  if (totalBars > 0) {
+    display.drawLine((totalBars - 1)* 8, SCREENHEIGHT - 1, (totalBars - 1) * 8 + 6, SCREENHEIGHT - 1, TS_8b_Yellow);
+  }
+  
+  writeStatsToSD();
+  
+  adjustDifficulty();
 
   if (game.lives == 0)
   {
     char *txt = "Game Over";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
+    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 5);
     display.print(txt);
-    txt = "You got to level ";
-    int width = display.getPrintWidth(txt) + display.getPrintWidth("2");
-    display.setCursor(SCREENWIDTH / 2 - width / 2, 25);
-    display.print(txt);
-    display.setCursor(SCREENWIDTH / 2 + display.getPrintWidth(txt) / 2, 25);
-    display.print(game.level);
   }
   else
   {
     char *txt = "You win";
-    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 10);
+    display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, 5);
     display.print(txt);
   }
 
-  // Display the high score
-  displayHighScore();
+  char* txt = "New timer: ";
+  int width = display.getPrintWidth(txt) + display.getPrintWidth("2.22");
+  display.setCursor(SCREENWIDTH / 2 - width / 2, 18);
+  display.print(txt);
+  display.setCursor(SCREENWIDTH / 2 - width / 2 + display.getPrintWidth(txt), 18);
+  display.print(rintf(game.timerMax / 10) / 100);
+  
+  memset(stats, 0, sizeof stats);
 }
 
 void drawStarScore(int x, int y, int color){
@@ -539,73 +652,135 @@ void randomCircle(bool left, int color)
   drawCircle(x, y, 14, color, true);
 }
 
-// Implement the SD card score-saving functions
-
-void writeScoreToSD(int score)
-{
-  // Open or create the file in append mode
-  File file = SD.open("scores.txt", FILE_WRITE);
+void writeStatsToSD() {
+  File file = SD.open("stats.txt", FILE_WRITE);
 
   if (file)
   {
-    // Write the score and close the file
-    file.println(score);
-    file.close();
-    SerialUSB.println("Score written to SD card.");
-  }
-  else
-  {
-    SerialUSB.println("Error opening scores.txt");
-  }
-}
-
-int readHighScoreFromSD()
-{
-  File file = SD.open("scores.txt");
-
-  if (file)
-  {
-    int highScore = 0;
-
-    while (file.available())
-    {
-      String line = file.readStringUntil('\n');
-      int score = line.toInt();
-      if (score > highScore)
-      {
-        highScore = score;
+    file.seek(0);
+    // Copy the file, prepend the new line, then overwrite the file
+    String prev = "";
+    while (file.available()) {
+      prev += file.readStringUntil('\n') + '\n';
+    }
+    String next = "";
+    for (int i = 0; i < levels; i++) {
+      if (stats[i].correct > 0 || stats[i].incorrect > 0) {
+        next.concat(stats[i].correct);
+        next.concat(",");
+        next.concat(stats[i].incorrect);
+        next.concat(";");
       }
     }
+    file.seek(0);
+    file.println(next);
+    file.print(prev);
     file.close();
-    SerialUSB.print("High score read from SD card: ");
-    SerialUSB.println(highScore);
-    return highScore;
+    SerialUSB.print("Stats written to SD card: ");
+    SerialUSB.println(next);
   }
   else
   {
-    SerialUSB.println("Error opening scores.txt");
-    return 0; // Return 0 if the file doesn't exist or can't be opened
+    SerialUSB.println("Error opening stats.txt");
   }
 }
 
-void displayHighScore()
-{
-  display.fontColor(TS_8b_Yellow, TS_8b_Black);
-  String highScoreText = "High Score: " + String(game.highScore);
+void readStatsFromSD() {
+  File file = SD.open("stats.txt");
+  if (file) {
+    historySize = 0;
+    while (file.available() && historySize < maxHistory) {
+      String line = file.readStringUntil('\n');
+      int statCount = 0;
+      int lastPos = 0;
+      int pos = 0;
 
-  // Create a modifiable character array
-  char highScoreTextArray[30]; // Ensure the array is large enough
-  strcpy(highScoreTextArray, highScoreText.c_str());
+      while (lastPos < line.length() && statCount < levels) {
+        pos = line.indexOf(';', lastPos);
+        if (pos == -1) pos = line.length();
+        String statString = line.substring(lastPos, pos);
+        if (statString.length() > 0) {
+          int commaPos = statString.indexOf(',');
+          if (commaPos >= 0) {
+            String correctStr = statString.substring(0, commaPos);
+            String incorrectStr = statString.substring(commaPos + 1);
+            int correct = correctStr.toInt();
+            int incorrect = incorrectStr.toInt();
 
-  int x = SCREENWIDTH / 2 - display.getPrintWidth(highScoreTextArray) / 2;
-  int y = SCREENHEIGHT - 15; // Adjust the position as needed
-  display.setCursor(x, y);
-  display.print(highScoreTextArray);
-  // Draw a rounded rectangle around the high score text
-  int rectWidth = display.getPrintWidth(highScoreTextArray) + 10;
-  int rectHeight = 20;
-  int rectX = x - 5;
-  int rectY = y - 5;
-  int radius = 5;
-  drawRoundedRect(rectX, rectY, rectWidth, rectHeight, radius, TS_8b_Red, false);
+            history[historySize][statCount].correct = correct;
+            history[historySize][statCount].incorrect = incorrect;
+            statCount++;
+          }
+        }
+        lastPos = pos + 1; // Move past the semicolon
+      }
+      historySize++;
+    }
+    file.close();
+  } else {
+    // Handle error opening file
+    SerialUSB.println("Error opening stats.txt");
+  }
 }
+
+//For testing
+void printFile(char* filename) {
+  File file = SD.open(filename);
+  if (file) {
+    SerialUSB.print("Printing ");
+    SerialUSB.println(filename);
+    while(file.available()) {
+      String line = file.readStringUntil('\n');
+      SerialUSB.println(line);
+    }
+    SerialUSB.println("----");
+    file.close();
+    return;
+  } 
+  SerialUSB.print(filename);
+  SerialUSB.println(" does not exist");
+}
+
+// int readHighScoreFromSD()
+// {
+//   File file = SD.open("scores.txt");
+
+//   if (file)
+//   {
+//     int highScore = 0;
+
+//     while (file.available())
+//     {
+//       String line = file.readStringUntil('\n');
+//       int score = line.toInt();
+//       if (score > highScore)
+//       {
+//         highScore = score;
+//       }
+//     }
+//     file.close();
+//     SerialUSB.print("High score read from SD card: ");
+//     SerialUSB.println(highScore);
+//     return highScore;
+//   }
+//   else
+//   {
+//     SerialUSB.println("Error opening scores.txt");
+//     return 0; // Return 0 if the file doesn't exist or can't be opened
+//   }
+// }
+
+// void displayHighScore()
+//{
+//   display.fontColor(TS_8b_Yellow, TS_8b_Black);
+//   String highScoreText = "High Score: " + String(game.highScore);
+//
+//   // Create a modifiable character array
+//   char highScoreTextArray[30]; // Ensure the array is large enough
+//   strcpy(highScoreTextArray, highScoreText.c_str());
+//
+//   int x = SCREENWIDTH / 2 - display.getPrintWidth(highScoreTextArray) / 2;
+//   int y = SCREENHEIGHT - 15; // Adjust the position as needed
+//   display.setCursor(x, y);
+//   display.print(highScoreTextArray);
+// }
