@@ -200,7 +200,7 @@ void updateTimer()
   if (!game.shapesHidden && progress >= game.timerMax / 2)
   {
     game.shapesHidden = true;
-    display.clearWindow(0, 20, SCREENWIDTH, SCREENHEIGHT - 25);
+    display.clearWindow(0, 15, SCREENWIDTH, SCREENHEIGHT - 25);
   }
   if (progress >= game.timerMax)
   {
@@ -304,6 +304,24 @@ void displayTutorialStep()
   }
 }
 
+void flashScreen(int color, int duration){
+  // in between screen so they know when the levels switch
+  display.clearWindow(0, 0, SCREENWIDTH, SCREENHEIGHT);
+  char *txt = "NEW LEVEL!";
+  display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, SCREENHEIGHT / 2 - 10);
+  display.print(txt);
+  // to make it prettier - display five shapes around the text 
+  drawCircle(20, SCREENHEIGHT - 20, 5, TS_8b_White, true); // Bottom-left corner
+  drawCircle(SCREENWIDTH - 30, SCREENHEIGHT - 10, 10, TS_8b_Blue, true); // Bottom-right corner
+  drawCircle(SCREENWIDTH - 20, 13, 8, TS_8b_Red, true); // Top-right corner
+  drawStar(10, 20, 15, TS_8b_Brown, true); // Top-left corner TS_8b_DarkBlu
+  drawStar(SCREENWIDTH / 2, SCREENHEIGHT / 2 + 20, 10, TS_8b_White, true); // Below the text
+  drawStar(SCREENWIDTH - 20, SCREENHEIGHT / 2 + 20, 10, TS_8b_Green, true); // Below the text
+  
+  delay(duration);
+  display.clearWindow(0, 0, SCREENWIDTH, SCREENHEIGHT); 
+}
+
 void nextLevel()
 {
   if (game.level == levels)
@@ -312,6 +330,7 @@ void nextLevel()
     return;
   }
   screen = GAMEPLAY;
+  flashScreen(TS_8b_Blue, 1000);
   game.level++;
   game.lives = startingLives;
   game.correct = 0; // Resetting correct answers for the new level
@@ -363,6 +382,10 @@ void gameOver()
   displayHighScore();
 }
 
+void drawStarScore(int x, int y, int color){
+  int size = 10; 
+  drawStar(x, y, size, color, true);
+}
 void drawHUD()
 {
   display.clearWindow(0, 0, SCREENWIDTH, 20);
@@ -378,6 +401,12 @@ void drawHUD()
   display.fontColor(TS_8b_Red, TS_8b_Black);
   display.setCursor(SCREENWIDTH - 13, 6);
   display.print(game.lives);
+
+  // draw a star at the left corner 
+  drawStarScore(8, 20, TS_8b_Green);
+  // ehart for the levels 
+  drawHeart(SCREENWIDTH - 10, 20, 10, TS_8b_Red);
+
 }
 
 void drawShapes()
@@ -399,8 +428,8 @@ void drawShapes()
       game.currSameColor = false;
     }
 
-    drawShape(true, colors[leftColorIndex], random(3));
-    drawShape(false, colors[rightColorIndex], random(3));
+    drawShape(true, colors[leftColorIndex], random(5));
+    drawShape(false, colors[rightColorIndex], random(5));
   }
   else if (game.level == 2)
   {
@@ -436,7 +465,36 @@ void drawShape(bool left, int color, int shapeType)
   case 2:
     randomCircle(left, color);
     break;
+  case 3:
+    randomPlus(left, color);
+    break;
+  case 4:
+    randomStar(left, color);
+    break;
   }
+}
+
+void randomStar(bool left, int color) {
+    int x = SCREENWIDTH / 2 + (left ? -20 : 20);
+    int y = SCREENHEIGHT * 2 / 3;
+    int size = 28;
+    if (random(2) == 0) {
+        drawStar(x, y, size, color, false);
+    } else {
+        drawStar(x, y, size, color, true);
+    }
+}
+
+void randomPlus(bool left, int color) {
+    int x = SCREENWIDTH / 2 + (left ? -20 : 20);
+    int y = SCREENHEIGHT * 2 / 3;
+    int size = 28;
+    int thickness = 6;
+    if (random(2) == 0) {
+        drawPlus(x, y, size, thickness, color, false);
+    } else {
+        drawPlus(x, y, size, thickness, color, true);
+    }
 }
 
 void randomTriangle(bool left, int color)
