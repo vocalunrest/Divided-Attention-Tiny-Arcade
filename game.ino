@@ -79,6 +79,8 @@ struct DebounceState rightDebounce;
 unsigned long debounceDelay = 30;
 
 int colors[] = {TS_8b_Blue, TS_8b_Red, TS_8b_Yellow};
+int numShapes = 5; // number of shapes to choose from
+int shapes[3]; // chosen shapes
 
 // Function prototypes for functions defined in shapes.ino
 void drawTriangle(int x0, int y0, int height, int color, bool fill);
@@ -108,6 +110,21 @@ void setup()
   }
 
   randomSeed(analogRead(2));
+  
+  // choose 3 shapes from the grab bag
+  int chosen = 0;
+  while (chosen < 3) {
+    int rand = random(0, numShapes + 0);
+    for (int i = 0; i < chosen; i++) {
+      if (rand == shapes[i]) {
+        rand = random(0, numShapes);
+        i = 0;
+      }
+    }
+    shapes[chosen] = rand;
+    chosen++;
+  }
+
   arcadeInit();
   display.begin();
   display.setBrightness(10); // 0-15
@@ -395,6 +412,9 @@ void nextLevel()
   if (game.level >= 1)
   {
     populateStats();
+    if (game.level < levels) {
+      flashScreen(TS_8b_Blue, 1000);
+    }
   }
 
   if (game.level == levels)
@@ -404,7 +424,6 @@ void nextLevel()
   }
 
   screen = GAMEPLAY;
-  flashScreen(TS_8b_Blue, 1000);
   game.level++;
   game.lives = startingLives;
   game.correct = 0; // Resetting correct answers for the new level
@@ -541,8 +560,8 @@ void drawShapes()
       game.currSameColor = false;
     }
 
-    drawShape(true, colors[leftColorIndex], random(5));
-    drawShape(false, colors[rightColorIndex], random(5));
+    drawShape(true, colors[leftColorIndex], shapes[random(3)]);
+    drawShape(false, colors[rightColorIndex], shapes[random(3)]);
   }
   else if (game.level == 2)
   {
@@ -560,8 +579,8 @@ void drawShapes()
       game.currSameShape = false;
     }
 
-    drawShape(true, colors[random(3)], leftShapeType);
-    drawShape(false, colors[random(3)], rightShapeType);
+    drawShape(true, colors[random(3)], shapes[leftShapeType]);
+    drawShape(false, colors[random(3)], shapes[rightShapeType]);
   }
 }
 
