@@ -111,6 +111,17 @@ void setup()
 
   randomSeed(analogRead(2));
   
+  arcadeInit();
+  display.begin();
+  display.setBrightness(10); // 0-15
+  display.setFont(thinPixel7_10ptFontInfo);
+
+  pinMode(speakerPin, OUTPUT); // Initialize speaker pin
+
+  displayTutorialStep(); // Display the first tutorial step
+}
+
+void grabShapes() {
   // choose 3 shapes from the grab bag
   int chosen = 0;
   while (chosen < 3) {
@@ -124,15 +135,6 @@ void setup()
     shapes[chosen] = rand;
     chosen++;
   }
-
-  arcadeInit();
-  display.begin();
-  display.setBrightness(10); // 0-15
-  display.setFont(thinPixel7_10ptFontInfo);
-
-  pinMode(speakerPin, OUTPUT); // Initialize speaker pin
-
-  displayTutorialStep(); // Display the first tutorial step
 }
 
 void loop()
@@ -415,6 +417,8 @@ void nextLevel()
     if (game.level < levels) {
       flashScreen(TS_8b_Blue, 1000);
     }
+  } else {
+    grabShapes();
   }
 
   if (game.level == levels)
@@ -619,7 +623,7 @@ void randomStar(bool left, int color) {
 
 void randomPlus(bool left, int color) {
     int x = SCREENWIDTH / 2 + (left ? -20 : 20);
-    int y = SCREENHEIGHT * 2 / 3;
+    int y = SCREENHEIGHT * 2 / 3 - 4;
     int size = 28;
     int thickness = 6;
     if (random(2) == 0) {
