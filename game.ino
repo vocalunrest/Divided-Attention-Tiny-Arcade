@@ -99,6 +99,7 @@ void setup()
   if (!SD.begin(chipSelect, SD_SCK_MHZ(25)))
   {
     SerialUSB.println("SD card initialization failed!");
+    game.timerMax = timerBase;
   }
   else
   {
