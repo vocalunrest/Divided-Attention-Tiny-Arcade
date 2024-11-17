@@ -388,7 +388,7 @@ void displayTutorialStep()
 
 void flashScreen(int color, int duration){
   // in between screen so they know when the levels switch
-  display.clearWindow(0, 0, SCREENWIDTH, SCREENHEIGHT);
+  display.clearWindow(0, 0, SCREENWIDTH + 2, SCREENHEIGHT);
   char *txt = "NEW LEVEL!";
   display.setCursor(SCREENWIDTH / 2 - display.getPrintWidth(txt) / 2, SCREENHEIGHT / 2 - 10);
   display.print(txt);
@@ -471,7 +471,7 @@ void printStatBar(struct LevelStats stats[], int xStart)
 void gameOver()
 {
   screen = END;
-  display.clearWindow(0, 0, SCREENWIDTH + 1, SCREENHEIGHT);
+  display.clearWindow(0, 0, SCREENWIDTH + 2, SCREENHEIGHT);
   display.fontColor(TS_8b_White, TS_8b_Black);
 
   memcpy(currentSession[currentSessionSize++], stats, sizeof(stats));
@@ -527,7 +527,7 @@ void drawHUD()
   display.clearWindow(0, 0, SCREENWIDTH, 20);
 
   display.fontColor(TS_8b_Green, TS_8b_Black);
-  display.setCursor(2, 6);
+  display.setCursor(10, 6);
   display.print(game.correct);
 
   display.fontColor(TS_8b_White, TS_8b_Black);
@@ -535,13 +535,13 @@ void drawHUD()
   display.print(prompts[game.level - 1]);
 
   display.fontColor(TS_8b_Red, TS_8b_Black);
-  display.setCursor(SCREENWIDTH - 13, 6);
+  display.setCursor(SCREENWIDTH - 20, 6);
   display.print(game.lives);
 
   // draw a star at the left corner 
-  drawStarScore(8, 20, TS_8b_Green);
-  // ehart for the levels 
-  drawHeart(SCREENWIDTH - 10, 20, 10, TS_8b_Red);
+  drawStarScore(5, 10, TS_8b_Green);
+  // heart for the lives 
+  drawHeart(SCREENWIDTH - 3, 10, 10, TS_8b_Red);
 
 }
 
