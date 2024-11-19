@@ -76,6 +76,7 @@ struct DebounceState button1Debounce;
 struct DebounceState button2Debounce;
 struct DebounceState leftDebounce;
 struct DebounceState rightDebounce;
+struct DebounceState upDebounce;
 
 unsigned long debounceDelay = 30;
 
@@ -212,6 +213,7 @@ void checkInput()
   bool button2Pressed = debounce(checkButton(TAButton2), &button2Debounce) && button2Debounce.state;
   bool leftStickPressed = debounce(checkJoystick(TAJoystickLeft), &leftDebounce) && leftDebounce.state;
   bool rightStickPressed = debounce(checkJoystick(TAJoystickRight), &rightDebounce) && rightDebounce.state;
+  bool upStickPressed = debounce(checkJoystick(TAJoystickUp), &upDebounce) && upDebounce.state;
 
   bool leftPressed = button1Pressed || leftStickPressed;
   bool rightPressed = button2Pressed || rightStickPressed;
@@ -226,6 +228,8 @@ void checkInput()
       nextTutorialStep();
     } else if (leftPressed) {
       backTutorialStep();
+    } else if (upStickPressed) {
+      nextLevel();
     }
   }
   
@@ -388,7 +392,7 @@ void displayTutorialStep()
 
   TutorialText tutorialSteps[21][5] = {
       {{"Cognitive Therapy", 5}, {"Game", 15}, {"Improving", 30}, {"Focus & Memory", 40}, {"[Press right]", 55}},
-      {{"", 0}, {"To navigate this", 5}, {"tutorial:", 15}, {"Right = Continue", 35}, {"Left = Back", 45}},
+      {{"To navigate this", 5}, {"tutorial:", 15}, {"Right = Continue", 45}, {"Left = Back", 35}, {"Up = Skip Tutorial", 55}},
       {{"Our goal is to", 12}, {"improve cognitive", 22}, {"skills like focus", 32}, {"and attention!", 42}, {"", 0}},
       {{"Game Overview:", 2}, {"You'll be given a", 22}, {"series of objects", 32}, {"to compare.", 42}, {"", 0}},
       {{"Game Overview:", 2}, {"Identify whether", 22}, {"the objects match", 32}, {"based on certain", 42}, {" traits", 52}},
