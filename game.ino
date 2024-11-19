@@ -13,6 +13,7 @@ SdFat SD;                      // SD card object
 const uint8_t chipSelect = 10; // SD card chip select pin set to 10
 
 const int speakerPin = A0; // Speaker pin
+unsigned long tutorialTimerStart; // Persistent start time for the timer
 
 enum Screen
 {
@@ -138,9 +139,30 @@ void grabShapes() {
   }
 }
 
+void showBarDuringTutorial() {
+    
+    unsigned long elapsed = millis() - tutorialTimerStart; // Calculate elapsed time
+
+    if (elapsed >= game.timerMax) {
+        // Reset the timer for continuous simulation
+        tutorialTimerStart = millis();
+        elapsed = 0; // Reset elapsed time
+    }
+
+    // Calculate the new bar position
+    int newTimerX = round(((double)elapsed / (double)game.timerMax) * SCREENWIDTH);
+
+    // Clear and redraw the timer bar dynamically
+    display.drawLine(newTimerX, SCREENHEIGHT - 4, newTimerX, SCREENHEIGHT, TS_8b_Red);
+}
+
 void loop()
 {
   checkInput();
+  if (screen == TUTORIAL && tutorialStep == 13) {
+    // Reset timerStartMillis on entering tutorial step 13
+    showBarDuringTutorial();
+  }
   if (screen == GAMEPLAY)
   {
     updateTimer();
@@ -196,12 +218,14 @@ void checkInput()
   
   if (screen == TUTORIAL)
   {
-    if ((tutorialStep == 6 || tutorialStep == 9)) {
+    if ((tutorialStep == 9 || tutorialStep == 11)) {
       if (leftPressed) {
         nextTutorialStep();
       }
     } else if (rightPressed) {
       nextTutorialStep();
+    } else if (leftPressed) {
+      backTutorialStep();
     }
   }
   
@@ -331,9 +355,24 @@ void nextTutorialStep()
   tutorialStep++;
   displayTutorialStep();
   playBeep();
-  if (tutorialStep > 10)
+  if (tutorialStep == 13) {
+    tutorialTimerStart = millis();
+  }
+  if (tutorialStep > 20)
   {
     nextLevel();
+  }
+}
+
+void backTutorialStep()
+{
+  if (tutorialStep > 0){
+    tutorialStep--;
+    if (tutorialStep == 13) {
+     tutorialTimerStart = millis();
+    }
+    displayTutorialStep();
+    playBeep();
   }
 }
 
@@ -347,17 +386,27 @@ void displayTutorialStep()
       int yPos;
   };
 
-  TutorialText tutorialSteps[11][5] = {
+  TutorialText tutorialSteps[21][5] = {
       {{"Cognitive Therapy", 5}, {"Game", 15}, {"Improving", 30}, {"Focus & Memory", 40}, {"[Press right]", 55}},
-      {{"Our goal is to", 12}, {"improve cognitive", 22}, {"skills like focus", 32}, {"and attention!", 42}, {"[Press right]", 55}},
-      {{"Play to train your", 12}, {"brain & Practice", 22}, {"important skills!", 32}, {"", 0}, {"[Press right]", 55}},
-      {{"Buttons:", 2}, {"Right = Match", 22}, {"Left = Mismatch", 32}, {"", 0}, {"[Press right]", 55}},
-      {{"Level 1: Colors", 2}, {"Keep your focus", 22}, {"on the color", 32}, {"of objects", 42}, {"[Press right]", 55}},
+      {{"", 0}, {"To navigate this", 5}, {"tutorial:", 15}, {"Right = Continue", 35}, {"Left = Back", 45}},
+      {{"Our goal is to", 12}, {"improve cognitive", 22}, {"skills like focus", 32}, {"and attention!", 42}, {"", 0}},
+      {{"Game Overview:", 2}, {"You'll be given a", 22}, {"series of objects", 32}, {"to compare.", 42}, {"", 0}},
+      {{"Game Overview:", 2}, {"Identify whether", 22}, {"the objects match", 32}, {"based on certain", 42}, {" traits", 52}},
+      {{"Levels", 2}, {"Each level", 22}, {"introduces a new", 32}, {"trait to focus on", 42}, {"", 0}},
+      {{"Levels", 2}, {"Level1: Look at the", 15}, {"COLOR of objects", 25}, {"Level2: Look at the", 45}, {"SHAPES of objects", 55}},
+      {{"Buttons:", 2}, {"", 0}, {"", 0}, {"Right = Match", 22}, {"Left = Mismatch", 32},},
       {{"Level 1: Colors", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
       {{"Level 1: Colors", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
-      {{"Level 2: Shapes", 2}, {"Keep your focus", 22}, {"on the shapes", 32}, {"of objects", 42}, {"[Press right]", 55}},
       {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Right = Match]", 55}},
       {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
+      {{"Scores:", 2}, {"The number next", 22}, {"to the    star is", 32}, {"your current score", 42}, {"", 0}},
+      {{"Progress bar:", 2}, {"At the bottom,", 22}, {"the red bar shows", 32}, {"remaining time", 42}, {"", 0}},
+      {{"Timer:", 2}, {"Time limit is", 22}, {"decreased based", 32}, {"on the frequency", 42}, {"of correct answers", 52}},
+      {{"Timer:", 2}, {"Shapes go away at", 22}, {"half time to test", 32}, {"your memory and", 42}, {"focus skills", 52}},
+      {{"Stats bars:", 2}, {"At the end of game", 20}, {"         bars show", 30}, {"          progress", 40}, {"         over time", 50}},
+      {{"Stats bars:", 2}, {"Bar underlined in", 20}, {"        yellow is", 30}, {"        your last", 40}, {"          attempt", 50}},
+      {{"Stats bars:", 2}, {"", 0}, {"Reading stats bars", 20}, {" Green = correct", 52}, {" Red = errors", 37}},
+      {{"Stats bars:", 2}, {"", 0}, {"Reading stats bars", 20}, {"Top = Level 2", 37}, {"  Bottom = Level 1", 52}},
       {{"Start Game!", 15}, {"", 0}, {"", 0}, {"", 0}, {"[Press right]", 55}}
   };
   
@@ -367,24 +416,87 @@ void displayTutorialStep()
           int setCursor = SCREENWIDTH / 2 - display.getPrintWidth((char*)tutorialSteps[tutorialStep][i].text) / 2;
           display.setCursor(setCursor, tutorialSteps[tutorialStep][i].yPos);
           display.print(tutorialSteps[tutorialStep][i].text);
-          if (tutorialStep == 5){
+      }
+    }
+  switch (tutorialStep) {
+        case 8: case 9: case 10: case 11:
+            renderShapesForStep(tutorialStep);
+            break;
+        case 12:
+            renderScoreWithStar();
+            break;
+        case 16: case 17:
+            renderStatsBars();
+            break;
+        case 18: case 19:
+            renderSingleStatBar();
+            break;
+        default:
+            break;
+    }
+}
+
+void renderShapesForStep(int step) {
+    switch (step) {
+        case 8:
             drawShape(true, TS_8b_Yellow, 1);  // Left: Yellow square
             drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
-          }
-          else if (tutorialStep == 6) {
-            drawShape(true, TS_8b_Blue, 1);  // Left: Blue square
+            break;
+        case 9:
+            drawShape(true, TS_8b_Blue, 1);    // Left: Blue square
             drawShape(false, TS_8b_Yellow, 2); // Right: Yellow circle
-          }
-          else if (tutorialStep == 8) {
-            drawShape(true, TS_8b_Blue, 0); // Left: Blue triangle
-            drawShape(false, TS_8b_Red, 0); // Right: Red triangle
-          }
-          else if (tutorialStep == 9) {
-            drawShape(true, TS_8b_Blue, 1); // Left: Blue square
-            drawShape(false, TS_8b_Blue, 0); // Right: Blue triangle
-          }
-      }
-  }
+            break;
+        case 10:
+            drawShape(true, TS_8b_Blue, 0);    // Left: Blue triangle
+            drawShape(false, TS_8b_Red, 0);    // Right: Red triangle
+            break;
+        case 11:
+            drawShape(true, TS_8b_Blue, 1);    // Left: Blue square
+            drawShape(false, TS_8b_Blue, 0);   // Right: Blue triangle
+            break;
+    }
+}
+
+void renderScoreWithStar() {
+    drawStar(45, 37, 10, TS_8b_Green, true);
+    display.fontColor(TS_8b_Green, TS_8b_Black);
+    display.setCursor(10, 2);
+    display.print("5");
+    drawStarScore(5, 6, TS_8b_Green);
+    display.fontColor(TS_8b_White, TS_8b_Black);
+}
+
+void renderStatsBars() {
+    LevelStats mockHistory[2][2] = {
+        {{6, 4}, {4, 6}},
+        {{9, 1}, {8, 2}}  
+    };
+
+    LevelStats mockCurrentSession[3][2] = {
+        {{10, 0}, {9, 1}},
+        {{2, 8}},
+        {{6, 4}, {5, 5}}
+    };
+
+    int totalBars = 5;
+    int sessionBars = 3;
+
+    for (int i = 0; i < sessionBars; i++) {
+        printStatBar(mockCurrentSession[sessionBars - i - 1], (totalBars - i - 1) * 8);
+    }
+    for (int i = 0; i < totalBars - sessionBars; i++) {
+        printStatBar(mockHistory[i], (totalBars - sessionBars - i - 1) * 8);
+    }
+    if (totalBars > 0) {
+        display.drawLine((totalBars - 1) * 8, SCREENHEIGHT - 1, (totalBars - 1) * 8 + 6, SCREENHEIGHT - 1, TS_8b_Yellow);
+    }
+}
+
+void renderSingleStatBar() {
+    LevelStats mockCurrentSession[1][2] = {
+        {{8, 2}, {3, 7}}
+    };
+    printStatBar(mockCurrentSession[0], 0);
 }
 
 void flashScreen(int color, int duration){
