@@ -405,7 +405,7 @@ void displayTutorialStep()
       {{"Level 2: Shapes", 2}, {"Possible senarios:", 10}, {"", 0}, {"", 0}, {"[Left = Mismatch]", 55}},
       {{"Scores:", 2}, {"The number next", 22}, {"to the    star is", 32}, {"your current score", 42}, {"", 0}},
       {{"Progress bar:", 2}, {"At the bottom,", 22}, {"the red bar shows", 32}, {"remaining time", 42}, {"", 0}},
-      {{"Timer:", 2}, {"Time limit is", 22}, {"decreased based", 32}, {"on the frequency", 42}, {"of correct answers", 52}},
+      {{"Timer:", 2}, {"Time limit is", 22}, {"changed based", 32}, {"on the frequency", 42}, {"of correct answers", 52}},
       {{"Timer:", 2}, {"Shapes go away at", 22}, {"half time to test", 32}, {"your memory and", 42}, {"focus skills", 52}},
       {{"Stats bars:", 2}, {"At the end of game", 20}, {"         bars show", 30}, {"          progress", 40}, {"         over time", 50}},
       {{"Stats bars:", 2}, {"Bar underlined in", 20}, {"        yellow is", 30}, {"        your last", 40}, {"          attempt", 50}},
